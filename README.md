@@ -7,18 +7,19 @@ Single repository for parameter-efficient fine-tuning (PEFT) experiments on the 
 
 Only one PEFT method runs at a time, selected via `PEFT.METHOD` in the config.
 
-## Setup & run (vast.ai / Jupyter)
+## Setup & run (vast.ai)
 
-Upload `TransReID-PEFT.zip` to Jupyter, then:
+**Recommended** — clone your branch on the GPU instance:
 
 ```bash
-unzip -o TransReID-PEFT.zip
-python TransReID-PEFT/run.py
+git clone -b taaha https://github.com/taaha-fluidweb/TransReID-PEFT.git
+cd TransReID-PEFT
+python run.py --skip-unzip
 ```
 
-This installs deps, **downloads Market-1501 automatically**, downloads ViT weights, and starts training.
+After local changes: `git push` locally, then `git pull` on vast and re-run.
 
-You can optionally upload `market1501.zip` to skip the download.
+Zip upload still works; see [docs/VAST_AI.md](docs/VAST_AI.md).
 
 ```bash
 # SSF experiment

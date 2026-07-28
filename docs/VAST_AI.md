@@ -1,31 +1,61 @@
-# Running on vast.ai (Jupyter + zip upload)
+# Running on vast.ai
 
-Upload **`TransReID-PEFT.zip`** to Jupyter, then run one command. **Market-1501 downloads automatically** (~153 MB from Google Drive).
+**Recommended:** `git clone` your branch directly on the instance. Zip upload still works as a fallback.
 
-## Quick start (Jupyter)
+## Quick start (git clone — recommended)
 
-**Terminal** (from the folder where you uploaded the zip):
+```bash
+git clone -b taaha https://github.com/taaha-fluidweb/TransReID-PEFT.git
+cd TransReID-PEFT
+python run.py --skip-unzip
+```
+
+After you push changes from your local machine:
+
+```bash
+cd TransReID-PEFT
+git pull
+python run.py --skip-unzip --config configs/Market/lora_blocks_4_11_r32.yml
+```
+
+Use `--skip-unzip` whenever you cloned or pulled — there is no zip to extract.
+
+`run.py` will automatically:
+
+1. **Download Market-1501** (Google Drive, with HTTP mirror fallback)
+2. Install dependencies (`requirements-vast.txt` on GPU templates)
+3. Download ViT-Base weights if missing
+4. Run a smoke test
+5. Start training (default: LoRA blocks 4–11, r=32)
+
+### Update workflow (local → vast)
+
+| Step | Where | Command |
+|------|-------|---------|
+| Edit code / configs | Local (branch `taaha`) | — |
+| Commit & push | Local | `git add . && git commit -m "..." && git push` |
+| Pull latest | vast.ai | `git pull` |
+| Re-run setup or train | vast.ai | `python run.py --skip-unzip ...` |
+
+**Note:** `git pull` only updates code. Datasets (`data/`) and ViT weights (`.cache/`) stay on disk — you don't re-download them each pull.
+
+---
+
+## Fallback: zip upload
+
+Upload **`TransReID-PEFT.zip`** to Jupyter if git is unavailable:
 
 ```bash
 unzip -o TransReID-PEFT.zip
 python TransReID-PEFT/run.py
 ```
 
-**Notebook** (single cell):
+**Notebook:**
 
 ```python
-!unzip -o TransReID-PEFT.zip
-!python TransReID-PEFT/run.py
+!git clone -b taaha https://github.com/taaha-fluidweb/TransReID-PEFT.git
+!python TransReID-PEFT/run.py --skip-unzip
 ```
-
-`run.py` will automatically:
-
-1. Unzip the repo (if needed)
-2. **Download Market-1501** (Google Drive, with HTTP mirror fallback)
-3. Install dependencies (`requirements-vast.txt` on GPU templates)
-4. Download ViT-Base weights if missing
-5. Run a smoke test
-6. Start training (default: LoRA blocks 4–11, r=32)
 
 ## Optional: upload dataset zip to skip download
 
