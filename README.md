@@ -7,13 +7,35 @@ Single repository for parameter-efficient fine-tuning (PEFT) experiments on the 
 
 Only one PEFT method runs at a time, selected via `PEFT.METHOD` in the config.
 
-## Setup
+## Setup & run (vast.ai / Jupyter)
+
+Upload `TransReID-PEFT.zip` and `market1501.zip` to Jupyter, then:
+
+```bash
+unzip -o TransReID-PEFT.zip
+python TransReID-PEFT/run.py
+```
+
+This **unzips the dataset**, installs deps, downloads ViT weights, and **starts training** in one step.
+
+```bash
+# SSF experiment
+python run.py --config configs/Market/ssf_0_11_case1.yml
+
+# Setup only, no training
+python run.py --setup-only
+```
+
+See [docs/VAST_AI.md](docs/VAST_AI.md) for full options.
+
+**Local setup:**
 
 ```bash
 pip install -r requirements.txt
+python run.py --setup-only
 ```
 
-Place Market-1501 under `data/market1501/`. Download the ViT-Base ImageNet checkpoint to `.cache/torch/checkpoints/jx_vit_base_p16_224-80ecf9dd.pth`.
+Place Market-1501 under `data/market1501/` before training. ViT weights download automatically on first run.
 
 ## Training
 

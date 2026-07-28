@@ -1,0 +1,8 @@
+# Use on vast.ai / Jupyter instances that already ship PyTorch + CUDA.
+# Do NOT install torch/torchvision here — the GPU template provides them.
+timm
+yacs
+opencv-python
+pyyaml
+pytest
+gdown
