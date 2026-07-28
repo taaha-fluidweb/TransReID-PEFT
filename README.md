@@ -9,14 +9,16 @@ Only one PEFT method runs at a time, selected via `PEFT.METHOD` in the config.
 
 ## Setup & run (vast.ai / Jupyter)
 
-Upload `TransReID-PEFT.zip` and `market1501.zip` to Jupyter, then:
+Upload `TransReID-PEFT.zip` to Jupyter, then:
 
 ```bash
 unzip -o TransReID-PEFT.zip
 python TransReID-PEFT/run.py
 ```
 
-This **unzips the dataset**, installs deps, downloads ViT weights, and **starts training** in one step.
+This installs deps, **downloads Market-1501 automatically**, downloads ViT weights, and starts training.
+
+You can optionally upload `market1501.zip` to skip the download.
 
 ```bash
 # SSF experiment
@@ -35,7 +37,13 @@ pip install -r requirements.txt
 python run.py --setup-only
 ```
 
-Place Market-1501 under `data/market1501/` before training. ViT weights download automatically on first run.
+Place datasets under `data/` (or let `run.py` / the dataset loaders download them automatically):
+
+```bash
+python run.py --setup-only --download-all-datasets   # Market + Duke + Occ-Duke
+```
+
+ViT weights download automatically on first run.
 
 ## Training
 

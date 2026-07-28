@@ -5,3 +5,4 @@ yacs
 opencv-python
 pyyaml
 pytest
+gdown

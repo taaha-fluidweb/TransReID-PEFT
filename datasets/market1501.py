@@ -9,6 +9,7 @@ import re
 
 import os.path as osp
 
+from .download_market1501 import ensure_market1501
 from .bases import BaseImageDataset
 from collections import defaultdict
 import pickle
@@ -32,6 +33,7 @@ class Market1501(BaseImageDataset):
         self.query_dir = osp.join(self.dataset_dir, 'query')
         self.gallery_dir = osp.join(self.dataset_dir, 'bounding_box_test')
 
+        self._download_data()
         self._check_before_run()
         self.pid_begin = pid_begin
         train = self._process_dir(self.train_dir, relabel=True)
@@ -49,6 +51,12 @@ class Market1501(BaseImageDataset):
         self.num_train_pids, self.num_train_imgs, self.num_train_cams, self.num_train_vids = self.get_imagedata_info(self.train)
         self.num_query_pids, self.num_query_imgs, self.num_query_cams, self.num_query_vids = self.get_imagedata_info(self.query)
         self.num_gallery_pids, self.num_gallery_imgs, self.num_gallery_cams, self.num_gallery_vids = self.get_imagedata_info(self.gallery)
+
+    def _download_data(self):
+        if osp.exists(self.train_dir):
+            return
+        print("Market-1501 not found — downloading...")
+        ensure_market1501(root=osp.dirname(self.dataset_dir) or '.')
 
     def _check_before_run(self):
         """Check if all files are available before going deeper"""

@@ -2,9 +2,12 @@
 """
 One-shot bootstrap for vast.ai / Jupyter (zip upload workflow).
 
-Upload TransReID-PEFT.zip (+ market1501.zip) to Jupyter, then run:
+Upload TransReID-PEFT.zip to Jupyter, then run:
 
     python run.py
+
+Market-1501 is downloaded automatically (~153 MB from Google Drive).
+Optionally upload market1501.zip to skip the download.
 
 Or with options:
 
@@ -30,8 +33,12 @@ import zipfile
 from pathlib import Path
 
 REPO_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(REPO_DIR))
+
+from datasets.download_market1501 import ensure_market1501
+from datasets.download_duke import ensure_dukemtmcreid
+from datasets.build_occ_duke import ensure_occ_duke
 REPO_ZIP_NAMES = ("TransReID-PEFT.zip", "transreid-peft.zip")
-DATASET_ZIP_NAMES = ("market1501.zip", "Market-1501.zip", "Market1501.zip")
 WEIGHT_DIR = REPO_DIR / ".cache" / "torch" / "checkpoints"
 WEIGHT_FILE = WEIGHT_DIR / "jx_vit_base_p16_224-80ecf9dd.pth"
 VIT_URL = (
@@ -39,6 +46,8 @@ VIT_URL = (
     "v0.1-vitjx/jx_vit_base_p16_224-80ecf9dd.pth"
 )
 MARKET_DIR = REPO_DIR / "data" / "market1501"
+DUKE_DIR = REPO_DIR / "data" / "dukemtmcreid"
+OCC_DUKE_DIR = REPO_DIR / "data" / "Occluded_Duke"
 DEFAULT_CONFIG = "configs/Market/lora_blocks_4_11_r32.yml"
 
 
@@ -73,14 +82,26 @@ def resolve_repo_dir() -> Path:
     return REPO_DIR
 
 
+def _try_dataset(label: str, ensure_fn, root: Path, search_dirs: list[Path] | None = None) -> bool:
+    try:
+        ensure_fn(root=root, search_dirs=search_dirs)
+        print(f"    {label}: OK")
+        return True
+    except Exception as exc:
+        print(f"    WARNING: {label} setup failed: {exc}")
+        return False
+
+
 def unzip_archives(skip_unzip: bool) -> Path:
-    global REPO_DIR, WEIGHT_DIR, WEIGHT_FILE, MARKET_DIR
+    global REPO_DIR, WEIGHT_DIR, WEIGHT_FILE, MARKET_DIR, DUKE_DIR, OCC_DUKE_DIR
 
     if skip_unzip:
         REPO_DIR = resolve_repo_dir()
         WEIGHT_DIR = REPO_DIR / ".cache" / "torch" / "checkpoints"
         WEIGHT_FILE = WEIGHT_DIR / "jx_vit_base_p16_224-80ecf9dd.pth"
         MARKET_DIR = REPO_DIR / "data" / "market1501"
+        DUKE_DIR = REPO_DIR / "data" / "dukemtmcreid"
+        OCC_DUKE_DIR = REPO_DIR / "data" / "Occluded_Duke"
         return REPO_DIR
 
     cwd = Path.cwd()
@@ -95,27 +116,17 @@ def unzip_archives(skip_unzip: bool) -> Path:
     WEIGHT_DIR = REPO_DIR / ".cache" / "torch" / "checkpoints"
     WEIGHT_FILE = WEIGHT_DIR / "jx_vit_base_p16_224-80ecf9dd.pth"
     MARKET_DIR = REPO_DIR / "data" / "market1501"
+    DUKE_DIR = REPO_DIR / "data" / "dukemtmcreid"
+    OCC_DUKE_DIR = REPO_DIR / "data" / "Occluded_Duke"
 
-    if not (MARKET_DIR / "bounding_box_train").is_dir():
-        dataset_zip = _find_zip(search_dirs, DATASET_ZIP_NAMES)
-        if dataset_zip:
-            data_dir = REPO_DIR / "data"
-            unzip_file(dataset_zip, data_dir)
-            # Normalize layout: zip may contain market1501/ or flat folders
-            if not (MARKET_DIR / "bounding_box_train").is_dir():
-                for child in data_dir.iterdir():
-                    if child.is_dir() and (child / "bounding_box_train").is_dir():
-                        if child.name != "market1501":
-                            target = data_dir / "market1501"
-                            if target.exists():
-                                break
-                            child.rename(target)
-                        break
+    data_root = REPO_DIR / "data"
+    search_dirs = [Path.cwd(), REPO_DIR, REPO_DIR.parent, Path.cwd().parent]
+    _try_dataset("Market-1501", ensure_market1501, data_root, search_dirs)
 
     return REPO_DIR
 
 
-def setup(skip_smoke: bool = False) -> None:
+def setup(skip_smoke: bool = False, download_all_datasets: bool = False) -> None:
     print(f"\n==> TransReID-PEFT setup")
     print(f"    Repo: {REPO_DIR}")
     print(f"    Python: {sys.version.split()[0]}")
@@ -139,13 +150,27 @@ def setup(skip_smoke: bool = False) -> None:
         urllib.request.urlretrieve(VIT_URL, WEIGHT_FILE)
         print(f"    Saved to {WEIGHT_FILE}")
 
+    data_root = REPO_DIR / "data"
+    search_dirs = [Path.cwd(), REPO_DIR, REPO_DIR.parent, Path.cwd().parent]
+
     if (MARKET_DIR / "bounding_box_train").is_dir():
         print("    Market-1501: OK")
     else:
-        print(
-            "    WARNING: data/market1501/ not found.\n"
-            "    Upload market1501.zip alongside the repo zip, or extract manually."
-        )
+        print("    Downloading Market-1501 dataset...")
+        _try_dataset("Market-1501", ensure_market1501, data_root, search_dirs)
+
+    if download_all_datasets:
+        if (DUKE_DIR / "bounding_box_train").is_dir():
+            print("    DukeMTMC-reID: OK")
+        else:
+            print("    Downloading DukeMTMC-reID dataset...")
+            _try_dataset("DukeMTMC-reID", ensure_dukemtmcreid, data_root, search_dirs)
+
+        if (OCC_DUKE_DIR / "bounding_box_train").is_dir():
+            print("    Occluded-Duke: OK")
+        else:
+            print("    Building Occluded-Duke dataset...")
+            _try_dataset("Occluded-Duke", ensure_occ_duke, data_root, search_dirs)
 
     if not skip_smoke:
         print("    Running smoke test...")
@@ -162,7 +187,7 @@ def train(config: str, extra_args: list[str]) -> None:
     if not (MARKET_DIR / "bounding_box_train").is_dir():
         raise SystemExit(
             "Cannot train: Market-1501 not found at data/market1501/.\n"
-            "Upload market1501.zip and re-run: python run.py"
+            "Re-run setup: python run.py --setup-only"
         )
 
     cmd = [
@@ -189,6 +214,11 @@ def main() -> int:
     parser.add_argument("--skip-unzip", action="store_true", help="Skip zip extraction")
     parser.add_argument("--skip-setup", action="store_true", help="Skip dependency install / weights")
     parser.add_argument("--setup-only", action="store_true", help="Setup only, do not train")
+    parser.add_argument(
+        "--download-all-datasets",
+        action="store_true",
+        help="Also download DukeMTMC-reID and build Occluded-Duke (large; not needed for paper Market runs)",
+    )
     parser.add_argument("--skip-smoke", action="store_true", help="Skip smoke test during setup")
     parser.add_argument("extra", nargs="*", help="Extra args passed to train.py")
     args = parser.parse_args()
@@ -198,7 +228,7 @@ def main() -> int:
     os.chdir(repo)
 
     if not args.skip_setup:
-        setup(skip_smoke=args.skip_smoke)
+        setup(skip_smoke=args.skip_smoke, download_all_datasets=args.download_all_datasets)
 
     if args.setup_only:
         print("\nSetup complete (--setup-only).")
