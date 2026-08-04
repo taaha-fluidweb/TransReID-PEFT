@@ -55,7 +55,7 @@ def make_loss(cfg, num_classes):  # modified by gu + device-agnostic patch
 
     # ----- Compose final loss function by sampler -----
     if sampler == 'softmax':
-        def loss_func(score, feat, target):
+        def loss_func(score, feat, target, *args, **kwargs):
             if use_labelsmooth:
                 return xent(score, target)
             return F.cross_entropy(score, target)
