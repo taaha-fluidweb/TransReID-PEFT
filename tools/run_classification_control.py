@@ -69,7 +69,7 @@ def run_experiment(config_path: str, cpu_only: bool = False, max_epochs: int | N
     model = make_model(cfg, num_class=num_classes, camera_num=camera_num, view_num=view_num)
 
     loss_func, center_criterion = make_loss(cfg, num_classes=num_classes)
-    optimizer = make_optimizer(cfg, model, center_criterion)
+    optimizer, optimizer_center = make_optimizer(cfg, model, center_criterion)
     scheduler = create_scheduler(cfg, optimizer)
 
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -86,7 +86,7 @@ def run_experiment(config_path: str, cpu_only: bool = False, max_epochs: int | N
         train_loader,
         val_loader,
         optimizer,
-        None,
+        optimizer_center,
         scheduler,
         loss_func,
         num_query,
