@@ -191,7 +191,10 @@ class build_transformer(nn.Module):
 
     def forward(self, x, label=None, cam_label=None, view_label=None):
         global_feat = self.base(x, cam_label=cam_label, view_label=view_label)
-        feat = self.bottleneck(global_feat)
+        if self.neck == 'no':
+            feat = global_feat
+        else:
+            feat = self.bottleneck(global_feat)
         if self.training:
             if self.ID_LOSS_TYPE in ('arcface', 'cosface', 'amsoftmax', 'circle'):
                 cls_score = self.classifier(feat, label)

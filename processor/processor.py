@@ -235,6 +235,13 @@ def do_train(
 def _evaluate(cfg, model, val_loader, evaluator, device, logger, epoch):
     model.eval()
     evaluator.reset()
+    is_classification = (getattr(cfg.MODEL, "HEAD_TYPE", "") == "classification" or cfg.DATALOADER.SAMPLER == "softmax")
+    
+    total_samples = 0
+    top1_correct = 0
+    top5_correct = 0
+
+    unwrapped_model = model.module if hasattr(model, "module") else model
 
     for n_iter, (img, pid, camid, camids, target_view, imgpath) in enumerate(val_loader):
         with torch.no_grad():
@@ -244,11 +251,30 @@ def _evaluate(cfg, model, val_loader, evaluator, device, logger, epoch):
             feat = model(img, cam_label=camids, view_label=target_view)
             evaluator.update((feat, pid, camid))
 
+            if is_classification and hasattr(unwrapped_model, "classifier"):
+                logits = unwrapped_model.classifier(feat)
+                targets = torch.tensor(pid, dtype=torch.long, device=device)
+                total_samples += targets.size(0)
+                _, pred = logits.topk(max(1, min(5, logits.size(1))), 1, True, True)
+                pred = pred.t()
+                correct = pred.eq(targets.view(1, -1).expand_as(pred))
+                top1_correct += correct[:1].reshape(-1).float().sum().item()
+                if logits.size(1) >= 5:
+                    top5_correct += correct[:5].reshape(-1).float().sum().item()
+                else:
+                    top5_correct += correct[:1].reshape(-1).float().sum().item()
+
     cmc, mAP, _, _, _, _, _ = evaluator.compute()
     if epoch is None:
         logger.info("Validation Results")
     else:
         logger.info("Validation Results - Epoch: {}".format(epoch))
+
+    if is_classification and total_samples > 0:
+        top1_acc = 100.0 * top1_correct / total_samples
+        top5_acc = 100.0 * top5_correct / total_samples
+        logger.info("Classification Top-1 Acc: {:.2f}%, Top-5 Acc: {:.2f}%".format(top1_acc, top5_acc))
+
     logger.info("mAP: {:.1%}".format(mAP))
     for r in [1, 5, 10]:
         logger.info("CMC curve, Rank-{:<3}:{:.1%}".format(r, cmc[r - 1]))
@@ -274,6 +300,13 @@ def do_inference(cfg, model, val_loader, num_query):
     model.to(device)
     model.eval()
     img_path_list = []
+    
+    is_classification = (getattr(cfg.MODEL, "HEAD_TYPE", "") == "classification" or cfg.DATALOADER.SAMPLER == "softmax")
+    total_samples = 0
+    top1_correct = 0
+    top5_correct = 0
+
+    unwrapped_model = model.module if hasattr(model, "module") else model
 
     for n_iter, (img, pid, camid, camids, target_view, imgpath) in enumerate(val_loader):
         with torch.no_grad():
@@ -284,8 +317,25 @@ def do_inference(cfg, model, val_loader, num_query):
             evaluator.update((feat, pid, camid))
             img_path_list.extend(imgpath)
 
+            if is_classification and hasattr(unwrapped_model, "classifier"):
+                logits = unwrapped_model.classifier(feat)
+                targets = torch.tensor(pid, dtype=torch.long, device=device)
+                total_samples += targets.size(0)
+                _, pred = logits.topk(max(1, min(5, logits.size(1))), 1, True, True)
+                pred = pred.t()
+                correct = pred.eq(targets.view(1, -1).expand_as(pred))
+                top1_correct += correct[:1].reshape(-1).float().sum().item()
+                if logits.size(1) >= 5:
+                    top5_correct += correct[:5].reshape(-1).float().sum().item()
+                else:
+                    top5_correct += correct[:1].reshape(-1).float().sum().item()
+
     cmc, mAP, _, _, _, _, _ = evaluator.compute()
     logger.info("Validation Results ")
+    if is_classification and total_samples > 0:
+        top1_acc = 100.0 * top1_correct / total_samples
+        top5_acc = 100.0 * top5_correct / total_samples
+        logger.info("Classification Top-1 Acc: {:.2f}%, Top-5 Acc: {:.2f}%".format(top1_acc, top5_acc))
     logger.info("mAP: {:.1%}".format(mAP))
     for r in [1, 5, 10]:
         logger.info("CMC curve, Rank-{:<3}:{:.1%}".format(r, cmc[r - 1]))

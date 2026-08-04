@@ -32,6 +32,8 @@ _C.MODEL.PRETRAIN_CHOICE = 'imagenet'
 
 # If train with BNNeck, options: 'bnneck' or 'no'
 _C.MODEL.NECK = 'bnneck'
+# Head type, options: 'reid' or 'classification'
+_C.MODEL.HEAD_TYPE = 'reid'
 # If train loss include center loss, options: 'yes' or 'no'. Loss with center loss has different optimizer configuration
 _C.MODEL.IF_WITH_CENTER = 'no'
 
