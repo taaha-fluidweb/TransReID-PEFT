@@ -132,11 +132,19 @@ def setup(skip_smoke: bool = False, download_all_datasets: bool = False) -> None
     print(f"    Repo: {REPO_DIR}")
     print(f"    Python: {sys.version.split()[0]}")
 
-    import torch
+    try:
+        import torch
+        print(f"    PyTorch: {torch.__version__}")
+        has_cuda = torch.cuda.is_available()
+    except ImportError:
+        print("    PyTorch not found — installing PyTorch and torchvision...")
+        run([sys.executable, "-m", "pip", "install", "torch", "torchvision"])
+        import torch
+        print(f"    PyTorch installed: {torch.__version__}")
+        has_cuda = torch.cuda.is_available()
 
-    print(f"    PyTorch: {torch.__version__}")
-    req_file = "requirements-vast.txt" if torch.cuda.is_available() else "requirements.txt"
-    if torch.cuda.is_available():
+    req_file = "requirements-vast.txt" if has_cuda else "requirements.txt"
+    if has_cuda:
         print(f"    CUDA OK: {torch.cuda.get_device_name(0)}")
     else:
         print("    WARNING: CUDA not available — using full requirements.txt")
