@@ -27,6 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from config import cfg
+from config.loader import merge_config_file
 from datasets.download_msmt17 import ensure_msmt17
 from datasets.make_dataloader import make_dataloader
 from loss.make_loss import make_loss
@@ -58,7 +59,7 @@ def setup_logger(name: str):
 
 def run_experiment(config_path: str, cpu_only: bool = False, max_epochs: int | None = None) -> dict:
     cfg.defrost()
-    cfg.merge_from_file(config_path)
+    merge_config_file(cfg, config_path)
     if cpu_only:
         cfg.MODEL.DEVICE = "cpu"
         cfg.DATALOADER.NUM_WORKERS = 0
