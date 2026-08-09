@@ -133,7 +133,7 @@ def _train_running() -> bool:
         return False
 
 
-def run_one(label: str, config_rel: str, seed: int, epochs: int | None,
+def run_one(label: str, config_rel: str, seed: int, epochs: int | None, workers: int,
             force: bool, stop_on_error: bool, cpu_only: bool, progress: dict) -> int:
     if _train_running():
         print("ERROR: a train.py process is already running. Kill it first:")
@@ -151,6 +151,7 @@ def run_one(label: str, config_rel: str, seed: int, epochs: int | None,
            "SOLVER.SEED", str(seed)]
     if epochs is not None:
         cmd += ["SOLVER.MAX_EPOCHS", str(epochs)]
+    cmd += ["DATALOADER.NUM_WORKERS", str(workers)]
     if cpu_only:
         cmd += ["MODEL.DEVICE", "cpu", "DATALOADER.NUM_WORKERS", "0"]
 
@@ -210,6 +211,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run Experiment 4 sequentially (BitFit/LN/Adapter)")
     parser.add_argument("--seed", type=int, default=1234, help="SOLVER.SEED override (default 1234)")
     parser.add_argument("--epochs", type=int, default=None, help="SOLVER.MAX_EPOCHS override (debug)")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="DATALOADER.NUM_WORKERS (default 4; lower reduces dataloader "
+                             "fork memory pressure / segfaults on low-RAM hosts)")
     parser.add_argument("--only", type=str, default=None,
                         help="Filter: METHOD[,WINDOW] e.g. 'bitfit' or 'lntune,6_11'")
     parser.add_argument("--only-run", type=int, default=None, help="Run only the Nth config (1-based)")
@@ -235,8 +239,9 @@ def main() -> int:
                 continue
             if len(only_parts) > 1 and window not in only_parts[1:]:
                 continue
-        run_one(label, config_rel, seed=args.seed, epochs=args.epochs, force=args.force,
-                stop_on_error=args.stop_on_error, cpu_only=args.cpu_only, progress=progress)
+        run_one(label, config_rel, seed=args.seed, epochs=args.epochs, workers=args.workers,
+                force=args.force, stop_on_error=args.stop_on_error, cpu_only=args.cpu_only,
+                progress=progress)
 
     print("\n" + "=" * 70)
     print("  SUMMARY — logs/experiment4/progress.json")
