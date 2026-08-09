@@ -119,8 +119,26 @@ def _parse_metrics(log_path: Path) -> dict:
     return metrics
 
 
+def _train_running() -> bool:
+    """True if a train.py (or another run_experiment4) is already running.
+
+    Prevents two runners fighting over the same GPU — the cause of the
+    "CUDA-capable device(s) is/are busy or unavailable" failures and the
+    stuck-VRAM state during Experiment 4.
+    """
+    try:
+        out = subprocess.run(["pgrep", "-f", "train.py"], capture_output=True, text=True)
+        return out.returncode == 0
+    except Exception:
+        return False
+
+
 def run_one(label: str, config_rel: str, seed: int, epochs: int | None,
             force: bool, stop_on_error: bool, cpu_only: bool, progress: dict) -> int:
+    if _train_running():
+        print("ERROR: a train.py process is already running. Kill it first:")
+        print("       pkill -f train.py   (or wait for it to finish)")
+        sys.exit(1)
     key = f"{label}_s{seed}"
     if not force and key in progress and progress[key].get("returncode") == 0:
         print(f"[skip] {label} (seed {seed}) already completed — use --force to rerun")
