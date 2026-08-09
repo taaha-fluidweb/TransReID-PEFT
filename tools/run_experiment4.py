@@ -95,7 +95,18 @@ def run_one(label: str, config_rel: str, seed: int, epochs: int | None,
 
     start = time.time()
     with open(log_path, "wb") as logf:
-        proc = subprocess.run(cmd, stdout=logf, stderr=subprocess.STDOUT, cwd=str(REPO_ROOT))
+        # Tee: stream train.py output to the per-run log file AND the terminal
+        # so progress is visible live (not just after the run finishes).
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=str(REPO_ROOT)
+        )
+        assert proc.stdout is not None
+        for line in iter(proc.stdout.readline, b""):
+            logf.write(line)
+            logf.flush()
+            sys.stdout.buffer.write(line)
+            sys.stdout.flush()
+        proc.wait()
     wall = time.time() - start
 
     entry = {
