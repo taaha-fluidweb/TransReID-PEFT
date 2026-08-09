@@ -17,6 +17,7 @@ import json
 import re
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -54,6 +55,50 @@ def _load_progress() -> dict:
 
 def _save_progress(progress: dict) -> None:
     PROGRESS_FILE.write_text(json.dumps(progress, indent=2))
+
+
+def _gpu_stats() -> tuple | None:
+    """Return (util%, used_mib, total_mib) for the first GPU via nvidia-smi, or None."""
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if out.returncode != 0:
+            return None
+        line = out.stdout.strip().splitlines()[0]
+        util, used, total = [int(x.strip()) for x in line.split(",")]
+        return util, used, total
+    except Exception:
+        return None
+
+
+class _GpuMonitor:
+    """Polls nvidia-smi in a thread while a run executes; records peaks."""
+
+    def __init__(self, interval: float = 5.0):
+        self.interval = interval
+        self.peak_util = 0
+        self.peak_vram_mib = 0
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+
+    def start(self):
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+        self._thread.join(timeout=2)
+
+    def _loop(self):
+        while not self._stop.is_set():
+            stats = _gpu_stats()
+            if stats is not None:
+                util, used_mib, _ = stats
+                self.peak_util = max(self.peak_util, util)
+                self.peak_vram_mib = max(self.peak_vram_mib, used_mib)
+            self._stop.wait(self.interval)
 
 
 def _parse_metrics(log_path: Path) -> dict:
@@ -94,6 +139,8 @@ def run_one(label: str, config_rel: str, seed: int, epochs: int | None,
     print(f"     log: {log_path}")
 
     start = time.time()
+    monitor = _GpuMonitor(interval=5.0)
+    monitor.start()
     with open(log_path, "wb") as logf:
         # Tee: stream train.py output to the per-run log file AND the terminal
         # so progress is visible live (not just after the run finishes).
@@ -107,6 +154,7 @@ def run_one(label: str, config_rel: str, seed: int, epochs: int | None,
             sys.stdout.buffer.write(line)
             sys.stdout.flush()
         proc.wait()
+    monitor.stop()
     wall = time.time() - start
 
     entry = {
@@ -114,6 +162,8 @@ def run_one(label: str, config_rel: str, seed: int, epochs: int | None,
         "seed": seed,
         "returncode": proc.returncode,
         "wall_seconds": round(wall, 1),
+        "peak_vram_gb": round(monitor.peak_vram_mib / 1024, 2),
+        "peak_gpu_util": monitor.peak_util,
         **{"mAP": None, "R1": None, "param_ratio": None,
            "trainable_params": None, "total_params": None},
         **(_parse_metrics(log_path) if proc.returncode == 0 else {}),
@@ -122,7 +172,8 @@ def run_one(label: str, config_rel: str, seed: int, epochs: int | None,
     _save_progress(progress)
 
     status = "OK" if proc.returncode == 0 else f"FAILED (rc={proc.returncode})"
-    print(f"     [{label}] {status} in {wall:.0f}s")
+    print(f"     [{label}] {status} in {wall:.0f}s | "
+          f"peak VRAM {entry['peak_vram_gb']} GB | peak GPU {entry['peak_gpu_util']}%")
     if proc.returncode != 0:
         print(f"     check log: {log_path}")
         if stop_on_error:
@@ -169,7 +220,7 @@ def main() -> int:
     for key, entry in progress.items():
         print(f"  {key:<22} rc={entry['returncode']}  "
               f"params={entry.get('param_ratio')}%  mAP={entry.get('mAP')}  R1={entry.get('R1')}  "
-              f"{entry.get('wall_seconds')}s")
+              f"VRAM={entry.get('peak_vram_gb')}GB  {entry.get('wall_seconds')}s")
     return 0
 
 
