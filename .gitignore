@@ -220,6 +220,9 @@ ENV/
 # Rope project settings
 .ropeproject
 
+# Command Code
+.commandcode/
+
 # ML / project artifacts
 .pytest_cache/
 data/
