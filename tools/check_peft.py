@@ -12,6 +12,7 @@ import torch
 from config import cfg, merge_config_file, normalize_peft_config, get_peft_method
 from model import make_model
 from model.peft.lora import LoRALinear
+from model.peft.lightweight import BottleneckAdapter
 
 
 def _collect_loss(output):
@@ -50,6 +51,18 @@ def main():
     elif method == "ssf":
         ssf_params = [n for n, _ in model.named_parameters() if "ssf" in n]
         print(f"SSF parameters: {len(ssf_params)}")
+    elif method == "bitfit":
+        bias_params = [n for n, p in model.named_parameters() if p.requires_grad and "bias" in n]
+        print(f"BitFit trainable bias params: {len(bias_params)}")
+    elif method == "lntune":
+        from torch.nn import LayerNorm
+        ln_params = [n for n, p in model.named_parameters()
+                     if p.requires_grad and isinstance(
+                         dict(model.named_modules()).get(n.rsplit('.', 1)[0]), LayerNorm)]
+        print(f"LN-tuning trainable LayerNorm params: {len(ln_params)}")
+    elif method == "adapter":
+        adapter_layers = [n for n, m in model.named_modules() if isinstance(m, BottleneckAdapter)]
+        print(f"Adapter layers: {len(adapter_layers)}")
 
     if args.cpu_only:
         x = torch.randn(2, 3, cfg.INPUT.SIZE_TRAIN[0], cfg.INPUT.SIZE_TRAIN[1])

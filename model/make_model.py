@@ -5,6 +5,13 @@ import torch.nn as nn
 
 from config.peft_config import get_lora_blocks, get_peft_method, get_ssf_blocks
 from loss.metric_learning import Arcface, AMSoftmax, CircleLoss, Cosface
+from model.peft.lightweight import (
+    BottleneckAdapter,
+    inject_adapters_into_vit,
+    mark_trainable_adapters_and_head,
+    mark_trainable_bitfit,
+    mark_trainable_lntune,
+)
 from model.peft.lora import (
     inject_lora_into_vit,
     load_lora_state_dict,
@@ -360,6 +367,15 @@ __factory_T_type = {
 }
 
 
+def _print_trainable_stats(model: nn.Module) -> None:
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(
+        f'Trainable params: {trainable_params:,} / Total params: {total_params:,} '
+        f'({100 * trainable_params / total_params:.2f}%)'
+    )
+
+
 def make_model(cfg, num_class, camera_num, view_num):
     if cfg.MODEL.NAME == 'transformer':
         if cfg.MODEL.JPM:
@@ -399,15 +415,49 @@ def make_model(cfg, num_class, camera_num, view_num):
 
         mark_trainable_lora_and_head(model, train_head=cfg.PEFT.LORA.TRAIN_HEAD)
 
-        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        total_params = sum(p.numel() for p in model.parameters())
-        print(
-            f'Trainable params: {trainable_params:,} / Total params: {total_params:,} '
-            f'({100 * trainable_params / total_params:.2f}%)'
-        )
+        _print_trainable_stats(model)
 
         maybe_merge_lora(model.base, enabled=True, merge_at_eval=cfg.PEFT.LORA.MERGE_AT_EVAL)
         if cfg.PEFT.LORA.MERGE_AT_EVAL:
             print('LoRA will merge into base weights at eval time')
+
+    elif peft_method == 'bitfit' and cfg.MODEL.NAME == 'transformer':
+        print('===========Applying BitFit (bias-only fine-tuning)===========')
+        mark_trainable_bitfit(model, blocks=list(cfg.PEFT.BITFIT.BLOCKS) or None, train_head=True)
+        _print_trainable_stats(model)
+
+    elif peft_method == 'lntune' and cfg.MODEL.NAME == 'transformer':
+        print('===========Applying LN-tuning (LayerNorm-only fine-tuning)===========')
+        mark_trainable_lntune(
+            model,
+            blocks=list(cfg.PEFT.LNTUNE.BLOCKS) or None,
+            train_head=True,
+            train_final_norm=cfg.PEFT.LNTUNE.TRAIN_FINAL_NORM,
+        )
+        _print_trainable_stats(model)
+
+    elif peft_method == 'adapter' and cfg.MODEL.NAME == 'transformer':
+        print('===========Injecting bottleneck adapters===========')
+        include_blocks = list(cfg.PEFT.ADAPTER.BLOCKS) or None
+        if include_blocks:
+            print(f'Applying adapters to blocks: {include_blocks}')
+        else:
+            print('Applying adapters to all blocks')
+
+        replaced = inject_adapters_into_vit(
+            model.base,
+            r=cfg.PEFT.ADAPTER.R,
+            dropout=cfg.PEFT.ADAPTER.DROPOUT,
+            scale=cfg.PEFT.ADAPTER.SCALE,
+            targets=list(cfg.PEFT.ADAPTER.TARGETS),
+            include_blocks=include_blocks,
+        )
+        print(
+            f'Adapters applied to {len(replaced)} layers: {replaced[:3]}...'
+            if len(replaced) > 3 else f'Adapters applied to {len(replaced)} layers: {replaced}'
+        )
+
+        mark_trainable_adapters_and_head(model, train_head=True)
+        _print_trainable_stats(model)
 
     return model

@@ -23,6 +23,9 @@ def make_optimizer(cfg, model, center_criterion=None):
         if peft_method == 'ssf' and 'ssf' in name:
             lr = ssf_lr
             weight_decay = 0.0
+        elif peft_method == 'bitfit' and 'bias' in name:
+            lr = base_lr * 10
+            weight_decay = 0.0
         elif "bias" in name:
             lr = base_lr * bias_lr_factor
             weight_decay = wd_bias

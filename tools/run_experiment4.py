@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+"""
+tools/run_experiment4.py
+
+Sequential orchestrator for Experiment 4 (BitFit, LN-tuning, Bottleneck Adapters)
+on vast.ai. Runs the 9 configs one at a time as train.py subprocesses, streams each
+run's output to logs/experiment4/run_XX_<method>_<window>.log, and records a
+machine-readable summary in logs/experiment4/progress.json.
+
+Resumable: completed runs are skipped on restart unless --force.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# (label, config_path) — also defines the log numbering order.
+EXPERIMENT4_CONFIGS = [
+    ("bitfit_0_11", "configs/Market/bitfit_blocks_0_11.yml"),
+    ("bitfit_4_11", "configs/Market/bitfit_blocks_4_11.yml"),
+    ("bitfit_6_11", "configs/Market/bitfit_blocks_6_11.yml"),
+    ("lntune_0_11", "configs/Market/lntune_blocks_0_11.yml"),
+    ("lntune_4_11", "configs/Market/lntune_blocks_4_11.yml"),
+    ("lntune_6_11", "configs/Market/lntune_blocks_6_11.yml"),
+    ("adapter_0_11", "configs/Market/adapter_blocks_0_11_r16.yml"),
+    ("adapter_4_11", "configs/Market/adapter_blocks_4_11_r16.yml"),
+    ("adapter_6_11", "configs/Market/adapter_blocks_6_11_r16.yml"),
+]
+
+LOG_DIR = REPO_ROOT / "logs" / "experiment4"
+PROGRESS_FILE = LOG_DIR / "progress.json"
+
+MAP_RE = re.compile(r"mAP:\s*([0-9.]+)%")
+RANK1_RE = re.compile(r"CMC curve, Rank-1[^:]*:\s*([0-9.]+)%")
+TRAINABLE_RE = re.compile(r"Trainable params: ([\d,]+) / Total params: ([\d,]+) \(([0-9.]+)%\)")
+
+
+def _load_progress() -> dict:
+    if PROGRESS_FILE.exists():
+        try:
+            return json.loads(PROGRESS_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def _save_progress(progress: dict) -> None:
+    PROGRESS_FILE.write_text(json.dumps(progress, indent=2))
+
+
+def _parse_metrics(log_path: Path) -> dict:
+    text = log_path.read_text(errors="ignore")
+    metrics = {}
+    m = MAP_RE.findall(text)
+    if m:
+        metrics["mAP"] = float(m[-1])
+    m = RANK1_RE.findall(text)
+    if m:
+        metrics["R1"] = float(m[-1])
+    m = TRAINABLE_RE.findall(text)
+    if m:
+        metrics["trainable_params"] = int(m[-1][0].replace(",", ""))
+        metrics["total_params"] = int(m[-1][1].replace(",", ""))
+        metrics["param_ratio"] = float(m[-1][2])
+    return metrics
+
+
+def run_one(label: str, config_rel: str, seed: int, epochs: int | None,
+            force: bool, stop_on_error: bool, cpu_only: bool, progress: dict) -> int:
+    key = f"{label}_s{seed}"
+    if not force and key in progress and progress[key].get("returncode") == 0:
+        print(f"[skip] {label} (seed {seed}) already completed — use --force to rerun")
+        return 0
+
+    log_path = LOG_DIR / f"run_{len(progress) + 1:02d}_{label}.log"
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+    cmd = [sys.executable, str(REPO_ROOT / "train.py"), "--config_file", config_rel,
+           "SOLVER.SEED", str(seed)]
+    if epochs is not None:
+        cmd += ["SOLVER.MAX_EPOCHS", str(epochs)]
+    if cpu_only:
+        cmd += ["MODEL.DEVICE", "cpu", "DATALOADER.NUM_WORKERS", "0"]
+
+    print(f"\n===> [{label}] running: {' '.join(cmd)}")
+    print(f"     log: {log_path}")
+
+    start = time.time()
+    with open(log_path, "wb") as logf:
+        proc = subprocess.run(cmd, stdout=logf, stderr=subprocess.STDOUT, cwd=str(REPO_ROOT))
+    wall = time.time() - start
+
+    entry = {
+        "config": config_rel,
+        "seed": seed,
+        "returncode": proc.returncode,
+        "wall_seconds": round(wall, 1),
+        **{"mAP": None, "R1": None, "param_ratio": None,
+           "trainable_params": None, "total_params": None},
+        **(_parse_metrics(log_path) if proc.returncode == 0 else {}),
+    }
+    progress[key] = entry
+    _save_progress(progress)
+
+    status = "OK" if proc.returncode == 0 else f"FAILED (rc={proc.returncode})"
+    print(f"     [{label}] {status} in {wall:.0f}s")
+    if proc.returncode != 0:
+        print(f"     check log: {log_path}")
+        if stop_on_error:
+            print("     --stop-on-error set; aborting.")
+            sys.exit(proc.returncode)
+    return proc.returncode
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Run Experiment 4 sequentially (BitFit/LN/Adapter)")
+    parser.add_argument("--seed", type=int, default=1234, help="SOLVER.SEED override (default 1234)")
+    parser.add_argument("--epochs", type=int, default=None, help="SOLVER.MAX_EPOCHS override (debug)")
+    parser.add_argument("--only", type=str, default=None,
+                        help="Filter: METHOD[,WINDOW] e.g. 'bitfit' or 'lntune,6_11'")
+    parser.add_argument("--only-run", type=int, default=None, help="Run only the Nth config (1-based)")
+    parser.add_argument("--force", action="store_true", help="Rerun even if recorded as completed")
+    parser.add_argument("--stop-on-error", action="store_true", help="Abort on first failed run")
+    parser.add_argument("--cpu-only", action="store_true", help="CPU run (local sanity only)")
+    args = parser.parse_args()
+
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    progress = _load_progress()
+
+    print("=" * 70)
+    print("  EXPERIMENT 4 — BitFit / LN-tuning / Bottleneck Adapters (sequential)")
+    print("=" * 70)
+
+    for idx, (label, config_rel) in enumerate(EXPERIMENT4_CONFIGS, start=1):
+        if args.only_run is not None and idx != args.only_run:
+            continue
+        if args.only:
+            method, _, window = label.partition("_")
+            only_parts = args.only.replace(" ", "").split(",")
+            if method not in only_parts:
+                continue
+            if len(only_parts) > 1 and window not in only_parts[1:]:
+                continue
+        run_one(label, config_rel, seed=args.seed, epochs=args.epochs, force=args.force,
+                stop_on_error=args.stop_on_error, cpu_only=args.cpu_only, progress=progress)
+
+    print("\n" + "=" * 70)
+    print("  SUMMARY — logs/experiment4/progress.json")
+    print("=" * 70)
+    for key, entry in progress.items():
+        print(f"  {key:<22} rc={entry['returncode']}  "
+              f"params={entry.get('param_ratio')}%  mAP={entry.get('mAP')}  R1={entry.get('R1')}  "
+              f"{entry.get('wall_seconds')}s")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

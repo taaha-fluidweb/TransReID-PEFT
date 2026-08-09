@@ -74,7 +74,7 @@ _C.MODEL.SIE_VIEW = False
 # PEFT (Parameter-Efficient Fine-Tuning)
 # -----------------------------------------------------------------------------
 _C.PEFT = CN()
-_C.PEFT.METHOD = 'none'  # 'none' | 'lora' | 'ssf'
+_C.PEFT.METHOD = 'none'  # 'none' | 'lora' | 'ssf' | 'lntune' | 'bitfit' | 'adapter'
 
 _C.PEFT.LORA = CN()
 _C.PEFT.LORA.R = 8
@@ -94,6 +94,23 @@ _C.PEFT.SSF.MERGE_ON_SAVE = False
 _C.PEFT.SSF.LR = 0.0
 _C.PEFT.SSF.FREEZE_BACKBONE = False
 _C.PEFT.SSF.OPTIMIZER_CASE = 1  # 1 = LoRA-matched, 2 = SSF paper settings
+
+_C.PEFT.LNTUNE = CN()
+_C.PEFT.LNTUNE.ENABLED = False
+_C.PEFT.LNTUNE.BLOCKS = ()  # () = all blocks; or [0..11] / [4..11] / [6..11]
+_C.PEFT.LNTUNE.TRAIN_FINAL_NORM = True
+
+_C.PEFT.BITFIT = CN()
+_C.PEFT.BITFIT.ENABLED = False
+_C.PEFT.BITFIT.BLOCKS = ()  # () = all blocks; or [0..11] / [4..11] / [6..11]
+
+_C.PEFT.ADAPTER = CN()
+_C.PEFT.ADAPTER.ENABLED = False
+_C.PEFT.ADAPTER.R = 16
+_C.PEFT.ADAPTER.DROPOUT = 0.0
+_C.PEFT.ADAPTER.SCALE = 1.0
+_C.PEFT.ADAPTER.TARGETS = ["qkv", "proj", "fc1", "fc2"]
+_C.PEFT.ADAPTER.BLOCKS = ()  # () = all blocks; or [0..11] / [4..11] / [6..11]
 
 # Legacy LoRA node (backward compatibility with old YAML configs)
 _C.LORA = CN()

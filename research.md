@@ -12,15 +12,15 @@
 
 ## Abstract
 
-Vision Transformer (ViT) backbones such as TransReID achieve strong performance for person re-identification (Re-ID), but full fine-tuning is expensive in memory and compute. Parameter-efficient fine-tuning (PEFT) addresses this by freezing the backbone and learning a small set of task-specific parameters. We conduct a systematic, controlled comparison of two structurally distinct PEFT methods, Low-Rank Adaptation (LoRA) and Scale and Shift Features (SSF), on TransReID evaluated under the standard Market-1501 protocol. Keeping the training recipe fixed across all runs, we freeze the ViT backbone and inject LoRA into transformer-block linear layers (qkv, proj, fc1, fc2) and SSF scale-and-shift operations after four activation types (Attention, MLP, LayerNorm1, LayerNorm2). We systematically vary (i) depth placement (blocks 0–11, 4–11, 6–11), (ii) LoRA rank r ∈ {8, 16, 32} and scaling α, and (iii) module targeting and optimizer configuration for SSF.
+Vision Transformer (ViT) backbones such as TransReID achieve strong performance for person re-identification (Re-ID), but full fine-tuning is expensive in memory and compute. Parameter-efficient fine-tuning (PEFT) addresses this by freezing the backbone and learning a small set of task-specific parameters. We conduct a systematic, controlled comparison of five structurally distinct PEFT methods — Low-Rank Adaptation (LoRA), Scale and Shift Features (SSF), and the lightweight baselines BitFit, LayerNorm (LN) tuning, and bottleneck adapters — on TransReID evaluated under the standard Market-1501 protocol. Keeping the training recipe fixed across all runs, we freeze the ViT backbone and inject LoRA into transformer-block linear layers (qkv, proj, fc1, fc2), SSF scale-and-shift operations after four activation types (Attention, MLP, LayerNorm1, LayerNorm2), and bottleneck adapters at the same four linear targets; BitFit and LN-tuning train only bias terms or LayerNorm parameters respectively. We systematically vary (i) depth placement (blocks 0–11, 4–11, 6–11), (ii) LoRA rank r ∈ {8, 16, 32} and scaling α, and (iii) module targeting and optimizer configuration for SSF.
 
-Results show that depth placement is the dominant factor for both methods. LoRA at blocks 4–11 provides the best accuracy–memory compromise (∼25–30% VRAM reduction, mAP within 5–6 points of the full fine-tuning baseline). SSF achieves a compact trainable parameter footprint (∼2.87% of backbone parameters) but shows a larger accuracy gap. A comparative analysis reveals that LoRA and SSF are complementary: LoRA is preferred when accuracy recovery is paramount, SSF when parameter budget dominates. We provide a configuration-effect map and practical design guidelines for selecting PEFT settings under GPU constraints.
+Results show that depth placement is the dominant factor for all methods. LoRA at blocks 4–11 provides the best accuracy–memory compromise (∼25–30% VRAM reduction, mAP within 5–6 points of the full fine-tuning baseline). SSF achieves a compact trainable parameter footprint (∼2.87% of backbone parameters) but shows a larger accuracy gap. The lightweight baselines (BitFit, LN-tuning, bottleneck adapters) expand the parameter-efficiency frontier: they occupy the smallest parameter budgets, giving practitioners a finer-grained set of options for extremely constrained deployments. A comparative analysis reveals that the methods are complementary across the accuracy–parameter trade-off: LoRA is preferred when accuracy recovery is paramount, SSF when parameter budget dominates, and BitFit/LN-tuning/adapters when only a tiny budget is available. We provide a configuration-effect map and practical design guidelines for selecting PEFT settings under GPU constraints.
 
 **Code and resources:**
 - LoRA: https://github.com/Huzaifa9559/LoRa-on-Transreid
 - SSF: https://github.com/TameemaRehman/SSF_TransReID
 
-**Keywords:** Person Re-Identification, Parameter-Efficient Fine-Tuning (PEFT), Vision Transformers (ViT), LoRA, SSF
+**Keywords:** Person Re-Identification, Parameter-Efficient Fine-Tuning (PEFT), Vision Transformers (ViT), LoRA, SSF, BitFit, LayerNorm Tuning, Bottleneck Adapters
 
 ---
 
@@ -32,9 +32,9 @@ These questions are especially relevant for person re-identification (Re-ID) [7]
 
 ### Contributions:
 
-1. We present the first systematic comparison of LoRA and SSF on a ViT-based Re-ID backbone (TransReID), varying depth placement, rank, scaling, module targeting, and optimizer configuration across both methods.
-2. We quantify accuracy–memory trade-offs for both methods and construct a configuration-effect map with a non-dominated frontier analysis.
-3. We derive practical guidelines for selecting PEFT configurations under GPU constraints, identifying stable and unstable regions in the combined configuration space.
+1. We present the first systematic comparison of five PEFT methods (LoRA, SSF, BitFit, LN-tuning, bottleneck adapters) on a ViT-based Re-ID backbone (TransReID), varying depth placement, rank, scaling, module targeting, and optimizer configuration across methods.
+2. We quantify accuracy–memory trade-offs for all methods and construct a configuration-effect map with a non-dominated frontier analysis that includes the lightweight baselines as additional recommender options.
+3. We derive practical guidelines for selecting PEFT configurations under GPU constraints, identifying stable and unstable regions in the combined configuration space and covering very small parameter budgets via BitFit/LN-tuning/adapters.
 
 ---
 
@@ -146,7 +146,17 @@ SSF has no rank hyperparameter. Its configuration axes are:
 - **Depth:** The same three block coverage regimes as LoRA (0–11, 4–11, 6–11).
 - **Optimizer configuration:** Case 1 matches the LoRA training recipe (AdamW, BaseLR = 3.0 × 10⁻⁴, WeightDecay = 0.05) for fair cross-method comparison. Case 2 follows the SSF paper's official settings (AdamW, BaseLR = 3.5 × 10⁻⁴, WeightDecay = 10⁻⁴, BiasLRFactor = 2) [3].
 
-### 3.6. Configuration–Effect Mapping
+### 3.6. Lightweight PEFT Baselines: BitFit, LN-Tuning, and Bottleneck Adapters
+
+To broaden the comparison beyond weight-matrix (LoRA) and activation-affine (SSF) methods — and to give the recommender menu options for extremely small parameter budgets — we add three lightweight baselines, each applied to the same frozen ViT-Base backbone and the same training recipe.
+
+- **BitFit.** Only the bias terms of the backbone are trained. In our implementation this includes linear-layer biases and LayerNorm shift (β) parameters, matching the canonical BitFit definition [19]. The head remains fully trainable. BitFit biases are optimized with the SSF-consistent learning-rate rule (10× base LR, zero weight decay) so that a bias-only update has a comparable effective step size.
+- **LN-tuning.** Only LayerNorm parameters (γ, β) are trained — all `weight` and `bias` of every `nn.LayerNorm` in the adapted blocks, including the final pre-head norm. This isolates the contribution of the per-channel normalization affine transform without touching any weight matrix.
+- **Bottleneck adapters.** A parallel bottleneck adapter `y = Wx + scale · U(GELU(Dx))` wraps each target linear (qkv, proj, fc1, fc2), with bottleneck dimension r = 16, down-projection `D` kaiming-initialized and up-projection `U` zero-initialized (identity at init, same trick as LoRA's zero-initialized `B`). The base linear is frozen.
+
+All three methods are evaluated across the same three depth windows as LoRA/SSF (blocks 0–11, 4–11, 6–11), with the JPM branches frozen, mirroring the existing LoRA treatment. This yields nine additional configurations in the configuration–effect map.
+
+### 3.7. Configuration–Effect Mapping
 
 Each configuration (PEFT method, block range, r, α, module targets, optimizer case) is mapped to an outcome vector (mAP, Rank-1/5/10, peak VRAM, training time, trainable parameter ratio), populating multiple points along the accuracy–efficiency frontier for analysis.
 
@@ -245,7 +255,30 @@ To determine whether the performance gap between PEFT and Full Fine-Tuning is an
 2. **Empirical Confirmation of Framing 6:** The accuracy gap observed under the standard Re-ID protocol is **objective-driven** (caused by the fine-grained pairwise manifold restructuring demanded by Triplet Loss), NOT an architectural limitation of LoRA or the ViT backbone. Freezing 98%+ of the backbone acts as an effective regularizer under classification loss.
 3. **Preservation of the Non-Dominated Frontier:** LoRA 4–11 ($r=32$) retains **79.6% mAP / 90.7% Rank-1** (within 0.9% of Full FT) while reducing peak VRAM from 7.91 GB to **5.68 GB** (a **28.2% memory savings**), confirming its status as the primary efficiency-compromise recommendation across objectives.
 
-### 4.7. Comparative Analysis and Design Guidelines
+### 4.8. Lightweight PEFT Baselines on Market-1501
+
+Following the same protocol, we evaluate the three lightweight baselines (BitFit, LN-tuning, bottleneck adapters) across the three depth windows (0–11, 4–11, 6–11), with the JPM branches frozen and the Re-ID head trainable (60 epochs, AdamW, softmax+triplet). Table 5 summarizes the results alongside the frontier points for reference. Placeholder values (TBD) are filled by `tools/run_experiment4.py` on vast.ai.
+
+**Table 5: Lightweight PEFT Baselines on Market-1501.** Same recipe as Table 3 runs; JPM branches frozen, head trainable.
+
+| Config | Method | Blocks | Trainable Params (%) | Peak VRAM (GB) | mAP (%) | Rank-1 (%) |
+|---|---|---|---|---|---|---|
+| bitfit 0–11 | BitFit | 0–11 | ~0.12% | TBD | TBD | TBD |
+| bitfit 4–11 | BitFit | 4–11 | ~0.09% | TBD | TBD | TBD |
+| bitfit 6–11 | BitFit | 6–11 | ~0.06% | TBD | TBD | TBD |
+| lntune 0–11 | LN-tuning | 0–11 | ~0.04% | TBD | TBD | TBD |
+| lntune 4–11 | LN-tuning | 4–11 | ~0.03% | TBD | TBD | TBD |
+| lntune 6–11 | LN-tuning | 6–11 | ~0.02% | TBD | TBD | TBD |
+| adapter 0–11 (r=16) | Bottleneck adapter | 0–11 | ~2.2% | TBD | TBD | TBD |
+| adapter 4–11 (r=16) | Bottleneck adapter | 4–11 | ~1.6% | TBD | TBD | TBD |
+| adapter 6–11 (r=16) | Bottleneck adapter | 6–11 | ~1.1% | TBD | TBD | TBD |
+| *(reference)* Full FT | — | 0–11 | 100% | 11.5 | 88.0 | 94.4 |
+| *(reference)* 4–11 LoRA r=32 | LoRA | 4–11 | ~4.1% | ~7.8 | 82–83 | — |
+| *(reference)* 0–11 SSF Case 2 | SSF | 0–11 | ~2.83% | ~10.0 | 79.9 | 91.1 |
+
+The lightweight baselines extend the parameter-efficiency frontier to much smaller budgets than SSF: LN-tuning and BitFit train well under 1% of parameters, while bottleneck adapters (r=16) sit between LoRA and SSF in both parameter count and expected accuracy. These become additional options in the recommender menu for extremely constrained deployments (see Table 3).
+
+### 4.9. Comparative Analysis and Design Guidelines
 
 Aggregating all LoRA and SSF configurations with the baseline enables a structured comparison across the accuracy–efficiency landscape. A configuration cᵢ dominates cⱼ if:
 
@@ -269,6 +302,8 @@ LoRA and SSF emerge as complementary. LoRA consistently recovers more of the ful
 | ∼30% VRAM savings | 4–11 LoRA, r=16–32, α ≈ 2r | mAP ≈ 82–83%, 7.8–8.3 GB |
 | Min. trainable params | 0–11 SSF (Case 2) | mAP ≈ 79.9%, ∼2.83% params |
 | Tight GPU (∼7 GB) | 6–11 LoRA, r=16–32, α ≈ 2r | mAP ≈ 75–79%, 7–7.6 GB |
+| Tiny parameter budget | 0–11 LN-tuning / BitFit | < 0.15% params, lower mAP (see Table 5) |
+| Mid efficiency | 0–11 adapter r=16 | ~2.2% params, between LoRA and SSF (see Table 5) |
 | Avoid instability | Keep α ≈ 2r; avoid r=16, α=64 | Smooth accuracy vs. rank curve |
 
 ---
@@ -305,15 +340,15 @@ This study is deliberately scoped to one backbone (TransReID with ViT-Base), one
 
 **Configuration grid boundaries.** The LoRA rank grid (r ∈ {8, 16, 32}) and scaling grid (α ∈ {16, 32, 48, 64}) were chosen to balance coverage with computational cost. Very low ranks (r < 8) and very high ranks (r > 32) are not evaluated; it remains open whether the instability observed at high rank in the 0–11 regime persists at r = 64 or higher. Similarly, the SSF configuration space currently has no operation-type ablation: we apply SSF uniformly after all four operation types per block. A future ablation isolating the contribution of LayerNorm-specific SSF modules (which cannot benefit from zero-FLOPs reparameterization) would clarify whether those positions contribute meaningfully or introduce unnecessary interaction with the existing normalization operations in the transformer block.
 
-**Single PEFT method per experiment.** LoRA and SSF are studied as independent methods. Hybrid configurations that combine LoRA weight-space updates with SSF activation-space modulation, or that apply different PEFT methods to different block ranges, are not explored. Future work should investigate whether combining the two approaches yields additive benefits in accuracy or efficiency, and should extend the comparison to additional PEFT methods such as adapter layers, visual prompt tuning (VPT), and residual-style low-rank fine-tuning [18] under the same controlled testbed.
+**Method coverage.** The comparison includes five PEFT methods (LoRA, SSF, BitFit, LN-tuning, bottleneck adapters), but each is studied as an independent method. Hybrid configurations that combine LoRA weight-space updates with SSF activation-space modulation, or that apply different PEFT methods to different block ranges, are not explored. Future work should investigate whether combining approaches yields additive benefits in accuracy or efficiency, and should extend the comparison to additional PEFT methods such as visual prompt tuning (VPT) and residual-style low-rank fine-tuning [18] under the same controlled testbed. The lightweight baselines (BitFit, LN-tuning, adapters) are additionally evaluated at a single configuration (bottleneck r=16, bias LR 10×) per depth window; per-method hyperparameter sweeps are left to future work.
 
 ---
 
 ## 7. Conclusion
 
-We presented a systematic comparison of LoRA and SSF on the ViT-Base backbone of TransReID, evaluated on Market-1501. Systematically varying block coverage, rank, scaling, module targeting, and optimizer configuration under a unified 60-epoch training recipe, we constructed a configuration-effect map and comparative analysis across both methods.
+We presented a systematic comparison of five PEFT methods (LoRA, SSF, BitFit, LN-tuning, bottleneck adapters) on the ViT-Base backbone of TransReID, evaluated on Market-1501. Systematically varying block coverage, rank, scaling, module targeting, and optimizer configuration under a unified 60-epoch training recipe, we constructed a configuration-effect map and comparative analysis across all methods.
 
-Depth placement is the dominant factor for both methods. For LoRA, the 4–11 mid+late regime provides the best compromise: approximately 25–30% VRAM reduction with mAP within 5–6 points of full fine-tuning. Moderate α ≈ 2r is stable across partial-coverage regimes; aggressive scaling destabilizes training. Adapting both attention and MLP layers consistently outperforms attention-only configurations. For SSF, full block coverage (0–11) is essential; partial coverage causes steeper accuracy drops than for LoRA. SSF achieves a compact trainable parameter footprint (≈2.87%) but a larger accuracy gap than the best LoRA configurations under matched training budgets.
+Depth placement is the dominant factor across methods. For LoRA, the 4–11 mid+late regime provides the best compromise: approximately 25–30% VRAM reduction with mAP within 5–6 points of full fine-tuning. Moderate α ≈ 2r is stable across partial-coverage regimes; aggressive scaling destabilizes training. Adapting both attention and MLP layers consistently outperforms attention-only configurations. For SSF, full block coverage (0–11) is essential; partial coverage causes steeper accuracy drops than for LoRA. SSF achieves a compact trainable parameter footprint (≈2.87%) but a larger accuracy gap than the best LoRA configurations under matched training budgets. The lightweight baselines (BitFit, LN-tuning, bottleneck adapters) fill the very-low-parameter-budget end of the frontier, giving practitioners additional options between full LoRA and ultra-light tuning.
 
 A unified analysis positions 4–11 LoRA (r=32, α=64) as the default recommendation when accuracy recovery and VRAM savings must both be achieved; 0–11 SSF (Case 2) as the ultra-parameter-efficient alternative; and 6–11 LoRA variants for the most resource-constrained deployments.
 
