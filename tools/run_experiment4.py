@@ -41,7 +41,8 @@ LOG_DIR = REPO_ROOT / "logs" / "experiment4"
 PROGRESS_FILE = LOG_DIR / "progress.json"
 
 MAP_RE = re.compile(r"mAP:\s*([0-9.]+)%")
-RANK1_RE = re.compile(r"CMC curve, Rank-1[^:]*:\s*([0-9.]+)%")
+# \b after the rank digit prevents "Rank-1" from matching "Rank-10".
+RANK_RE = re.compile(r"CMC curve, Rank-(\d+)\b[^:]*:\s*([0-9.]+)%")
 TRAINABLE_RE = re.compile(r"Trainable params: ([\d,]+) / Total params: ([\d,]+) \(([0-9.]+)%\)")
 
 
@@ -108,9 +109,8 @@ def _parse_metrics(log_path: Path) -> dict:
     m = MAP_RE.findall(text)
     if m:
         metrics["mAP"] = float(m[-1])
-    m = RANK1_RE.findall(text)
-    if m:
-        metrics["R1"] = float(m[-1])
+    for rank, value in RANK_RE.findall(text):
+        metrics[f"R{rank}"] = float(value)
     m = TRAINABLE_RE.findall(text)
     if m:
         metrics["trainable_params"] = int(m[-1][0].replace(",", ""))
