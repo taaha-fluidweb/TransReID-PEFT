@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -135,6 +136,11 @@ def run_one(label: str, config_rel: str, seed: int, epochs: int | None,
     if cpu_only:
         cmd += ["MODEL.DEVICE", "cpu", "DATALOADER.NUM_WORKERS", "0"]
 
+    env = dict(os.environ)
+    # PyTorch 2.x: use expandable segments to reduce CUDA fragmentation (the
+    # OOM we hit was fragmentation, not capacity — the model fits in ~7 GB).
+    env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
     print(f"\n===> [{label}] running: {' '.join(cmd)}")
     print(f"     log: {log_path}")
 
@@ -145,7 +151,7 @@ def run_one(label: str, config_rel: str, seed: int, epochs: int | None,
         # Tee: stream train.py output to the per-run log file AND the terminal
         # so progress is visible live (not just after the run finishes).
         proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=str(REPO_ROOT)
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=str(REPO_ROOT), env=env
         )
         assert proc.stdout is not None
         for line in iter(proc.stdout.readline, b""):
