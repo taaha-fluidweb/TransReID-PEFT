@@ -226,7 +226,6 @@ ENV/
 # ML / project artifacts
 .pytest_cache/
 data/
-logs/
 .cache/
 *.pth
 *.pkl
