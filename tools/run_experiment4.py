@@ -26,15 +26,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # (label, config_path) — also defines the log numbering order.
 EXPERIMENT4_CONFIGS = [
-    ("bitfit_0_11", "configs/Market/experiment4/bitfit_blocks_0_11.yml"),
-    ("bitfit_4_11", "configs/Market/experiment4/bitfit_blocks_4_11.yml"),
-    ("bitfit_6_11", "configs/Market/experiment4/bitfit_blocks_6_11.yml"),
-    ("lntune_0_11", "configs/Market/experiment4/lntune_blocks_0_11.yml"),
-    ("lntune_4_11", "configs/Market/experiment4/lntune_blocks_4_11.yml"),
-    ("lntune_6_11", "configs/Market/experiment4/lntune_blocks_6_11.yml"),
-    ("adapter_0_11", "configs/Market/experiment4/adapter_blocks_0_11_r16.yml"),
-    ("adapter_4_11", "configs/Market/experiment4/adapter_blocks_4_11_r16.yml"),
-    ("adapter_6_11", "configs/Market/experiment4/adapter_blocks_6_11_r16.yml"),
+    ("bitfit_0_11", "configs/Market/bitfit_blocks_0_11.yml"),
+    ("bitfit_4_11", "configs/Market/bitfit_blocks_4_11.yml"),
+    ("bitfit_6_11", "configs/Market/bitfit_blocks_6_11.yml"),
+    ("lntune_0_11", "configs/Market/lntune_blocks_0_11.yml"),
+    ("lntune_4_11", "configs/Market/lntune_blocks_4_11.yml"),
+    ("lntune_6_11", "configs/Market/lntune_blocks_6_11.yml"),
+    ("adapter_0_11", "configs/Market/adapter_blocks_0_11_r16.yml"),
+    ("adapter_4_11", "configs/Market/adapter_blocks_4_11_r16.yml"),
+    ("adapter_6_11", "configs/Market/adapter_blocks_6_11_r16.yml"),
 ]
 
 LOG_DIR = REPO_ROOT / "logs" / "experiment4"

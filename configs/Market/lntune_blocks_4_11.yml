@@ -1,4 +1,4 @@
-_BASE_: '../../base/market1501_transreid.yml'
+_BASE_: '../base/market1501_transreid.yml'
 
 PEFT:
   METHOD: 'lntune'

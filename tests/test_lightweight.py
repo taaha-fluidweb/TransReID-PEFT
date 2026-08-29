@@ -34,7 +34,7 @@ def _forward(model):
 
 
 def test_bitfit_blocks_6_11():
-    model = _build_model("configs/Market/experiment4/bitfit_blocks_6_11.yml")
+    model = _build_model("configs/Market/bitfit_blocks_6_11.yml")
     expected_blocks = set(cfg.PEFT.BITFIT.BLOCKS)
 
     trainable_bias_blocks = set()
@@ -55,7 +55,7 @@ def test_bitfit_blocks_6_11():
 
 
 def test_lntune_blocks_6_11():
-    model = _build_model("configs/Market/experiment4/lntune_blocks_6_11.yml")
+    model = _build_model("configs/Market/lntune_blocks_6_11.yml")
     expected_blocks = set(cfg.PEFT.LNTUNE.BLOCKS)
 
     trainable_ln_blocks = set()
@@ -80,7 +80,7 @@ def test_lntune_blocks_6_11():
 
 
 def test_adapter_blocks_6_11():
-    model = _build_model("configs/Market/experiment4/adapter_blocks_6_11_r16.yml")
+    model = _build_model("configs/Market/adapter_blocks_6_11_r16.yml")
     expected_blocks = set(cfg.PEFT.ADAPTER.BLOCKS)
 
     adapter_modules = [n for n, m in model.named_modules() if isinstance(m, BottleneckAdapter)]

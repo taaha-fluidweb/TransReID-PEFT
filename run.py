@@ -11,7 +11,7 @@ Optionally upload market1501.zip to skip the download.
 
 Or with options:
 
-    python run.py --config configs/Market/experiment1_2/ssf_0_11_case1.yml
+    python run.py --config configs/Market/ssf_0_11_case1.yml
     python run.py --setup-only
     python run.py --skip-unzip --skip-setup
 
@@ -49,7 +49,7 @@ VIT_URL = (
 MARKET_DIR = REPO_DIR / "data" / "market1501"
 DUKE_DIR = REPO_DIR / "data" / "dukemtmcreid"
 OCC_DUKE_DIR = REPO_DIR / "data" / "Occluded_Duke"
-DEFAULT_CONFIG = "configs/Market/experiment1_2/lora_blocks_4_11_r32.yml"
+DEFAULT_CONFIG = "configs/Market/lora_blocks_4_11_r32.yml"
 
 
 def run(cmd: list[str], cwd: Path | None = None) -> None:
