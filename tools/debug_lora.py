@@ -25,7 +25,7 @@ def main():
     parser = argparse.ArgumentParser(description="LoRA Debug Smoke Test")
     parser.add_argument(
         "--config_file", 
-        default="configs/Market/vit_transreid_stride_lora.yml", 
+        default="configs/Market/baselines/vit_transreid_stride_lora.yml", 
         help="path to config file", 
         type=str
     )

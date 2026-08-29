@@ -13,7 +13,7 @@ from model.peft.lora import LoRALinear
 
 
 def test_lora_block_specific():
-    merge_config_file(cfg, "configs/Market/lora_blocks_6_11_r32.yml")
+    merge_config_file(cfg, "configs/Market/experiment1_2/lora_blocks_6_11_r32.yml")
     cfg.defrost()
     cfg.MODEL.PRETRAIN_CHOICE = "none"
     cfg.MODEL.PRETRAIN_PATH = ""
