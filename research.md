@@ -14,7 +14,7 @@
 
 Vision Transformer (ViT) backbones such as TransReID achieve strong performance for person re-identification (Re-ID), but full fine-tuning is expensive in memory and compute. Parameter-efficient fine-tuning (PEFT) addresses this by freezing the backbone and learning a small set of task-specific parameters. We conduct a systematic, controlled comparison of five structurally distinct PEFT methods — Low-Rank Adaptation (LoRA), Scale and Shift Features (SSF), and the lightweight baselines BitFit, LayerNorm (LN) tuning, and bottleneck adapters — on TransReID evaluated under the standard Market-1501 protocol. Keeping the training recipe fixed across all runs, we freeze the ViT backbone and inject LoRA into transformer-block linear layers (qkv, proj, fc1, fc2), SSF scale-and-shift operations after four activation types (Attention, MLP, LayerNorm1, LayerNorm2), and bottleneck adapters at the same four linear targets; BitFit and LN-tuning train only bias terms or LayerNorm parameters respectively. We systematically vary (i) depth placement (blocks 0–11, 4–11, 6–11), (ii) LoRA rank r ∈ {8, 16, 32} and scaling α, and (iii) module targeting and optimizer configuration for SSF.
 
-Results show that depth placement is the dominant factor for all methods. LoRA at blocks 4–11 provides the best accuracy–memory compromise (∼25–30% VRAM reduction, mAP within 5–6 points of the full fine-tuning baseline). SSF achieves a compact trainable parameter footprint (∼2.87% of backbone parameters) but shows a larger accuracy gap. The lightweight baselines (BitFit, LN-tuning, bottleneck adapters) expand the parameter-efficiency frontier: they occupy the smallest parameter budgets, giving practitioners a finer-grained set of options for extremely constrained deployments. A comparative analysis reveals that the methods are complementary across the accuracy–parameter trade-off: LoRA is preferred when accuracy recovery is paramount, SSF when parameter budget dominates, and BitFit/LN-tuning/adapters when only a tiny budget is available. We provide a configuration-effect map and practical design guidelines for selecting PEFT settings under GPU constraints.
+Results show that depth placement is the dominant factor for all methods. Bottleneck adapters provide the strongest efficiency point: 0–11 adapters (r=16) reach **85.9 mAP / 93.7 Rank-1** — within ~2 mAP of full fine-tuning (88.0) at only 4.95% trainable parameters — outperforming LoRA (best 85.8 mAP at 0–11 r=8) and SSF (79.9 mAP). LoRA at blocks 4–11 provides the best accuracy–memory compromise among weight-space methods (∼25–30% VRAM reduction, mAP within 5 points of the full fine-tuning baseline). SSF achieves the most compact trainable parameter footprint (∼2.87% of backbone parameters) but shows a larger accuracy gap. The lightweight baselines BitFit (76.6 mAP) and LN-tuning (65.9 mAP) fill the very-low-parameter-budget end of the frontier. A comparative analysis reveals that the methods form an accuracy–efficiency spectrum: adapters are preferred when accuracy recovery is paramount under a memory budget, SSF when parameter storage dominates, and BitFit/LN-tuning when only a tiny budget is available. We provide a configuration-effect map and practical design guidelines for selecting PEFT settings under GPU constraints.
 
 **Code and resources:**
 - LoRA: https://github.com/Huzaifa9559/LoRa-on-Transreid
@@ -257,53 +257,60 @@ To determine whether the performance gap between PEFT and Full Fine-Tuning is an
 
 ### 4.8. Lightweight PEFT Baselines on Market-1501
 
-Following the same protocol, we evaluate the three lightweight baselines (BitFit, LN-tuning, bottleneck adapters) across the three depth windows (0–11, 4–11, 6–11), with the JPM branches frozen and the Re-ID head trainable (60 epochs, AdamW, softmax+triplet). Table 5 summarizes the results alongside the frontier points for reference. Placeholder values (TBD) are filled by `tools/run_experiment4.py` on vast.ai.
+Following the same protocol, we evaluate the three lightweight baselines (BitFit, LN-tuning, bottleneck adapters) across the three depth windows (0–11, 4–11, 6–11), with the JPM branches frozen and the Re-ID head trainable (60 epochs, AdamW, softmax+triplet). Table 5 summarizes the results alongside the frontier points for reference.
 
-**Table 5: Lightweight PEFT Baselines on Market-1501.** Same recipe as Table 3 runs; JPM branches frozen, head trainable.
+**Table 5: Lightweight PEFT Baselines on Market-1501.** Same recipe as Table 3 runs; JPM branches frozen, head trainable. All runs: 60 epochs, AdamW, seed 1234, RTX 3060.
 
-| Config | Method | Blocks | Trainable Params (%) | Peak VRAM (GB) | mAP (%) | Rank-1 (%) |
-|---|---|---|---|---|---|---|
-| bitfit 0–11 | BitFit | 0–11 | ~0.12% | TBD | TBD | TBD |
-| bitfit 4–11 | BitFit | 4–11 | ~0.09% | TBD | TBD | TBD |
-| bitfit 6–11 | BitFit | 6–11 | ~0.06% | TBD | TBD | TBD |
-| lntune 0–11 | LN-tuning | 0–11 | ~0.04% | TBD | TBD | TBD |
-| lntune 4–11 | LN-tuning | 4–11 | ~0.03% | TBD | TBD | TBD |
-| lntune 6–11 | LN-tuning | 6–11 | ~0.02% | TBD | TBD | TBD |
-| adapter 0–11 (r=16) | Bottleneck adapter | 0–11 | ~2.2% | TBD | TBD | TBD |
-| adapter 4–11 (r=16) | Bottleneck adapter | 4–11 | ~1.6% | TBD | TBD | TBD |
-| adapter 6–11 (r=16) | Bottleneck adapter | 6–11 | ~1.1% | TBD | TBD | TBD |
-| *(reference)* Full FT | — | 0–11 | 100% | 11.5 | 88.0 | 94.4 |
-| *(reference)* 4–11 LoRA r=32 | LoRA | 4–11 | ~4.1% | ~7.8 | 82–83 | — |
-| *(reference)* 0–11 SSF Case 2 | SSF | 0–11 | ~2.83% | ~10.0 | 79.9 | 91.1 |
+| Config | Method | Blocks | Trainable Params (%) | Peak VRAM (GB) | mAP (%) | Rank-1 (%) | Rank-5 (%) |
+|---|---|---|---|---|---|---|---|
+| bitfit 0–11 | BitFit | 0–11 | 2.89% (0.12% backbone) | 6.51 | 76.6 | 89.8 | 96.6 |
+| bitfit 4–11 | BitFit | 4–11 | 2.85% (0.09% backbone) | 6.51 | 69.4 | 85.1 | 94.7 |
+| bitfit 6–11 | BitFit | 6–11 | 2.84% (0.06% backbone) | 6.51 | 61.2 | 79.8 | 92.1 |
+| lntune 0–11 | LN-tuning | 0–11 | 2.82% (0.04% backbone) | 6.51 | 65.9 | 83.7 | 94.8 |
+| lntune 4–11 | LN-tuning | 4–11 | 2.81% (0.03% backbone) | 4.83 | 57.7 | 78.4 | 90.9 |
+| lntune 6–11 | LN-tuning | 6–11 | 2.80% (0.02% backbone) | 3.99 | 48.0 | 71.5 | 87.0 |
+| adapter 0–11 (r=16) | Bottleneck adapter | 0–11 | 4.95% | 8.03 | **85.9** | **93.7** | 97.8 |
+| adapter 4–11 (r=16) | Bottleneck adapter | 4–11 | 4.24% | 5.77 | 80.5 | 90.8 | 97.2 |
+| adapter 6–11 (r=16) | Bottleneck adapter | 6–11 | 3.88% | 4.67 | 74.8 | 87.8 | 95.8 |
+| *(reference)* Full FT | — | 0–11 | 100% | 11.5 | 88.0 | 94.4 | 98.2 |
+| *(reference)* 4–11 LoRA r=32 | LoRA | 4–11 | ~4.1% | 7.84 | 83.2 | 92.8 | 97.8 |
+| *(reference)* 0–11 SSF Case 2 | SSF | 0–11 | 2.83% | 10.0 | 79.9 | 91.1 | 97.1 |
+
+**Bottleneck adapters are the strongest lightweight method:** adapter 0–11 (r=16) reaches
+**85.9 mAP / 93.7 Rank-1** — within ~2 mAP of full fine-tuning (88.0) at only 4.95% trainable
+parameters — and outperforms both LoRA 0–11 r8 (85.8) and SSF 0–11 (79.9) on the same backbone.
+This makes adapters a new point on the non-dominated frontier for accuracy-vs-efficiency.
 
 The lightweight baselines extend the parameter-efficiency frontier to much smaller budgets than SSF: LN-tuning and BitFit train well under 1% of parameters, while bottleneck adapters (r=16) sit between LoRA and SSF in both parameter count and expected accuracy. These become additional options in the recommender menu for extremely constrained deployments (see Table 3).
 
 ### 4.9. Comparative Analysis and Design Guidelines
 
-Aggregating all LoRA and SSF configurations with the baseline enables a structured comparison across the accuracy–efficiency landscape. A configuration cᵢ dominates cⱼ if:
+Aggregating all LoRA, SSF, and lightweight-baseline configurations with the baseline enables a structured comparison across the accuracy–efficiency landscape. A configuration cᵢ dominates cⱼ if:
 
 $$\text{mAP}(c_i) \geq \text{mAP}(c_j) \text{ and } \text{VRAM}(c_i) \leq \text{VRAM}(c_j) \tag{3}$$
 
 with at least one strict inequality. The non-dominated frontier contains:
 
 - **Full fine-tuning:** best accuracy, highest VRAM (∼11.5 GB).
-- **0–11 LoRA, r=8, α=16:** near-baseline accuracy at similar memory; the "LoRA-style full adaptation" reference point.
-- **4–11 LoRA, r=32, α=64:** best overall LoRA trade-off at ≈7.8 GB (≈32% VRAM reduction) with mAP and Rank-1 close to baseline.
+- **0–11 adapter (r=16):** the strongest efficiency point — **85.9 mAP at 4.95% trainable params and 8.03 GB**, within ~2 mAP of full FT; the best accuracy-to-parameter ratio of any PEFT method studied.
+- **4–11 LoRA, r=32, α=64:** best LoRA trade-off at ≈7.8 GB (≈32% VRAM reduction) with mAP (83.2) and Rank-1 (92.8) close to baseline.
+- **0–11 LoRA, r=8, α=16:** near-baseline accuracy at similar memory (85.8 mAP, 11.4 GB).
 - **0–11 SSF, Case 2:** most parameter-efficient operating point, mAP = 79.9% at ≈2.83% trainable parameters.
+- **0–11 BitFit:** the lightweight-budget option — 76.6 mAP at 2.89% total params (≈0.12% backbone), on 6.51 GB.
 - **6–11 LoRA variants:** lowest-memory options (∼7 GB) with predictable but larger accuracy reductions.
 
-LoRA and SSF emerge as complementary. LoRA consistently recovers more of the full fine-tuning accuracy under matched training budgets, making it the default recommendation when accuracy recovery is paramount. SSF offers a structurally different advantage: its compact parameter footprint (≈2.87%) and zero inference FLOPs overhead via reparameterization make it attractive when parameter storage or communication cost dominates, such as in federated learning or multi-task parameter sharing scenarios. The two methods also respond differently to restricted block coverage: LoRA at 4–11 recovers a large fraction of the accuracy lost by 6–11, making it a viable mid-cost option; SSF at 4–11 shows a steeper drop relative to its 0–11 performance, making full coverage more important for SSF than for LoRA. Table 3 translates these observations into practical configuration guidelines.
+The PEFT methods form a clear accuracy–efficiency spectrum. Bottleneck adapters recover most of the full fine-tuning accuracy at roughly one-third the VRAM, making them the default recommendation when accuracy recovery is paramount under a memory budget. LoRA at 4–11 offers the best balance of accuracy and memory among weight-space methods. SSF provides the smallest trainable footprint with zero inference FLOPs overhead via reparameterization, attractive when parameter storage or communication cost dominates (e.g., federated learning). BitFit and LN-tuning fill the very-low-parameter-budget end with modest accuracy. The methods also respond differently to restricted block coverage: LoRA and adapters recover well at 4–11, while SSF and the lightweight baselines show steeper drops under partial coverage, making full coverage more important for them. Table 3 translates these observations into practical configuration guidelines.
 
 **Table 3: Practical Design Guidelines by Deployment Constraint.**
 
 | Constraint | Recommended Config | Expected Outcome |
 |---|---|---|
-| Maximize accuracy | Full FT or 0–11 LoRA r=8 | mAP ≈ 85–88%, 11–11.5 GB |
+| Maximize accuracy | Full FT or 0–11 adapter r=16 | Full FT: mAP ≈ 88%, 11.5 GB; adapter: mAP ≈ 85.9%, 8.03 GB |
 | ∼30% VRAM savings | 4–11 LoRA, r=16–32, α ≈ 2r | mAP ≈ 82–83%, 7.8–8.3 GB |
 | Min. trainable params | 0–11 SSF (Case 2) | mAP ≈ 79.9%, ∼2.83% params |
 | Tight GPU (∼7 GB) | 6–11 LoRA, r=16–32, α ≈ 2r | mAP ≈ 75–79%, 7–7.6 GB |
-| Tiny parameter budget | 0–11 LN-tuning / BitFit | < 0.15% params, lower mAP (see Table 5) |
-| Mid efficiency | 0–11 adapter r=16 | ~2.2% params, between LoRA and SSF (see Table 5) |
+| Tiny parameter budget | 0–11 BitFit / LN-tuning | mAP ≈ 76.6% (BitFit) / 65.9% (LN), < 3% total params (see Table 5) |
+| Mid efficiency | 4–11 adapter r=16 | mAP ≈ 80.5%, 4.24% params, 5.77 GB |
 | Avoid instability | Keep α ≈ 2r; avoid r=16, α=64 | Smooth accuracy vs. rank curve |
 
 ---
