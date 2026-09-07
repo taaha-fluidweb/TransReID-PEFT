@@ -21,8 +21,13 @@ def make_optimizer(cfg, model, center_criterion=None):
         lr = base_lr
         weight_decay = wd
 
+        # SSF parameters get zero weight decay and 10x base LR (or PEFT.SSF.LR) per Lian et al. (2022)
+        if "ssf" in name:
+            weight_decay = 0.0
+            ssf_lr = getattr(cfg.PEFT.SSF, "LR", 0.0) if hasattr(cfg, "PEFT") and hasattr(cfg.PEFT, "SSF") else 0.0
+            lr = ssf_lr if ssf_lr > 0 else base_lr * 10.0
         # bias-specific lr & decay
-        if "bias" in name:
+        elif "bias" in name:
             lr = base_lr * bias_lr_factor
             weight_decay = wd_bias
 
