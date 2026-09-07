@@ -32,6 +32,8 @@ _C.MODEL.PRETRAIN_CHOICE = 'imagenet'
 
 # If train with BNNeck, options: 'bnneck' or 'no'
 _C.MODEL.NECK = 'bnneck'
+# Head type, options: 'reid' or 'classification'
+_C.MODEL.HEAD_TYPE = 'reid'
 # If train loss include center loss, options: 'yes' or 'no'. Loss with center loss has different optimizer configuration
 _C.MODEL.IF_WITH_CENTER = 'no'
 
@@ -69,28 +71,58 @@ _C.MODEL.SIE_CAMERA = False
 _C.MODEL.SIE_VIEW = False
 
 # -----------------------------------------------------------------------------
-# LORA
+# PEFT (Parameter-Efficient Fine-Tuning)
 # -----------------------------------------------------------------------------
+_C.PEFT = CN()
+_C.PEFT.METHOD = 'none'  # 'none' | 'lora' | 'ssf' | 'lntune' | 'bitfit' | 'adapter'
+
+_C.PEFT.LORA = CN()
+_C.PEFT.LORA.R = 8
+_C.PEFT.LORA.ALPHA = 16
+_C.PEFT.LORA.DROPOUT = 0.0
+_C.PEFT.LORA.TARGETS = ["qkv", "proj", "fc1", "fc2"]
+_C.PEFT.LORA.TRAIN_HEAD = True
+_C.PEFT.LORA.MERGE_AT_EVAL = False
+_C.PEFT.LORA.BIAS = "none"
+_C.PEFT.LORA.SAVE_ADAPTER_ONLY = True
+_C.PEFT.LORA.BLOCKS = []
+
+_C.PEFT.SSF = CN()
+_C.PEFT.SSF.ENABLED = False
+_C.PEFT.SSF.BLOCKS = ()
+_C.PEFT.SSF.MERGE_ON_SAVE = False
+_C.PEFT.SSF.LR = 0.0
+_C.PEFT.SSF.FREEZE_BACKBONE = False
+_C.PEFT.SSF.OPTIMIZER_CASE = 1  # 1 = LoRA-matched, 2 = SSF paper settings
+
+_C.PEFT.LNTUNE = CN()
+_C.PEFT.LNTUNE.ENABLED = False
+_C.PEFT.LNTUNE.BLOCKS = ()  # () = all blocks; or [0..11] / [4..11] / [6..11]
+_C.PEFT.LNTUNE.TRAIN_FINAL_NORM = True
+
+_C.PEFT.BITFIT = CN()
+_C.PEFT.BITFIT.ENABLED = False
+_C.PEFT.BITFIT.BLOCKS = ()  # () = all blocks; or [0..11] / [4..11] / [6..11]
+
+_C.PEFT.ADAPTER = CN()
+_C.PEFT.ADAPTER.ENABLED = False
+_C.PEFT.ADAPTER.R = 16
+_C.PEFT.ADAPTER.DROPOUT = 0.0
+_C.PEFT.ADAPTER.SCALE = 1.0
+_C.PEFT.ADAPTER.TARGETS = ["qkv", "proj", "fc1", "fc2"]
+_C.PEFT.ADAPTER.BLOCKS = ()  # () = all blocks; or [0..11] / [4..11] / [6..11]
+
+# Legacy LoRA node (backward compatibility with old YAML configs)
 _C.LORA = CN()
-# Enable/disable LoRA training
 _C.LORA.ENABLED = False
-# Rank of the low-rank decomposition
 _C.LORA.R = 8
-# Alpha parameter for LoRA scaling
 _C.LORA.ALPHA = 16
-# Dropout probability for LoRA layers
 _C.LORA.DROPOUT = 0.0
-# Target modules to apply LoRA (list of strings)
 _C.LORA.TARGETS = ["qkv", "proj", "fc1", "fc2"]
-# Whether to train the classification head when using LoRA
 _C.LORA.TRAIN_HEAD = True
-# Whether to merge LoRA weights into base model during evaluation
 _C.LORA.MERGE_AT_EVAL = False
-# Bias handling: "none", "all", or "lora_only"
 _C.LORA.BIAS = "none"
-# Save only LoRA adapter weights (not full model)
 _C.LORA.SAVE_ADAPTER_ONLY = True
-# List of transformer blocks to apply LoRA to (e.g., [6, 7, 8, 9, 10, 11]). If empty, apply to all blocks.
 _C.LORA.BLOCKS = []
 
 # -----------------------------------------------------------------------------

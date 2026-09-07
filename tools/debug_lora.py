@@ -16,7 +16,7 @@ import argparse
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import cfg
+from config import cfg, merge_config_file, normalize_peft_config
 from model import make_model
 from datasets import make_dataloader
 
@@ -25,24 +25,26 @@ def main():
     parser = argparse.ArgumentParser(description="LoRA Debug Smoke Test")
     parser.add_argument(
         "--config_file", 
-        default="configs/Market/vit_transreid_stride_lora.yml", 
+        default="configs/Market/baselines/vit_transreid_stride_lora.yml", 
         help="path to config file", 
         type=str
     )
     args = parser.parse_args()
 
     # Load configuration
-    cfg.merge_from_file(args.config_file)
+    merge_config_file(cfg, args.config_file)
+    cfg.merge_from_list([])
+    normalize_peft_config(cfg)
     cfg.freeze()
     
     print("=" * 60)
     print("LoRA Debug Smoke Test")
     print("=" * 60)
     print(f"Config file: {args.config_file}")
-    print(f"LoRA enabled: {cfg.LORA.ENABLED}")
-    print(f"LoRA R: {cfg.LORA.R}")
-    print(f"LoRA Alpha: {cfg.LORA.ALPHA}")
-    print(f"LoRA targets: {cfg.LORA.TARGETS}")
+    print(f"PEFT method: {cfg.PEFT.METHOD}")
+    print(f"LoRA R: {cfg.PEFT.LORA.R}")
+    print(f"LoRA Alpha: {cfg.PEFT.LORA.ALPHA}")
+    print(f"LoRA targets: {cfg.PEFT.LORA.TARGETS}")
     print(f"Model type: {cfg.MODEL.NAME}")
     print(f"Transformer type: {cfg.MODEL.TRANSFORMER_TYPE}")
     print("=" * 60)
@@ -95,7 +97,7 @@ def main():
         # Check which ones match our targets
         print("\n" + "-" * 60)
         print("MATCHING TARGET PATTERNS:")
-        targets = cfg.LORA.TARGETS if cfg.LORA.ENABLED else ["qkv", "proj", "fc1", "fc2"]
+        targets = cfg.PEFT.LORA.TARGETS if cfg.PEFT.METHOD == 'lora' else ["qkv", "proj", "fc1", "fc2"]
         for target in targets:
             matching = [name for name in linear_layers if target in name]
             print(f"  '{target}': {len(matching)} matches")
@@ -119,7 +121,7 @@ def main():
     if lora_layers > 5:
         print(f"... and {lora_layers - 5} more LoRA layers")
 
-    if cfg.LORA.ENABLED:
+    if cfg.PEFT.METHOD == 'lora':
         if lora_layers > 0:
             print(f"✅ LoRA injection successful: Found {lora_layers} LoRA layers")
         else:

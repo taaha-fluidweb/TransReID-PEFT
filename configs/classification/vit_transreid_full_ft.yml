@@ -1,0 +1,6 @@
+_BASE_: '../base/classification_transreid.yml'
+
+PEFT:
+  METHOD: 'none'
+
+OUTPUT_DIR: '../logs/classification_full_ft'
