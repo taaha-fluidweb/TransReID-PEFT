@@ -1,6 +1,6 @@
-# Efficient Person Re-Identification via LoRA and SSF: A Comparative PEFT Study on ViT Backbone in TransReID
+# PEFT-on-ReID: Parameter-Efficient Fine-Tuning for Person Re-Identification on Vision Transformers
 
-Official repository for the paper: **"Efficient Person Re-Identification via LoRA and SSF: A Comparative PEFT Study on ViT Backbone in TransReID"** (Naseer et al., 2025).
+Official repository for the paper: **"PEFT-on-ReID: A Systematic Comparative Study of Parameter-Efficient Fine-Tuning on Vision Transformers for Person Re-Identification"** (Naseer et al., 2025).
 
 This repository provides a unified parameter-efficient fine-tuning (PEFT) framework for Vision Transformer (ViT) backbones on TransReID, featuring **LoRA**, **SSF**, **BitFit**, **LN-Tuning**, **Bottleneck Adapters**, **Classification Control (Framing 6)**, and **MSMT17 cross-dataset validation**.
 
@@ -135,7 +135,7 @@ If you use this repository or code, please cite our study and the original Trans
 
 ```bibtex
 @article{naseer2025peft,
-  title   = {Efficient Person Re-Identification via LoRA and SSF: A Comparative PEFT Study on ViT Backbone in TransReID},
+  title   = {PEFT-on-ReID: Parameter-Efficient Fine-Tuning for Person Re-Identification on Vision Transformers},
   author  = {Naseer, Huzaifa and Rehman, Tameema and Ashfaq, Anas and Syed, Farrukh Hasan},
   year    = {2025}
 }

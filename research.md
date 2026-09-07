@@ -1,4 +1,4 @@
-# Efficient Person Re-Identification via LoRA and SSF: A Comparative PEFT Study on ViT Backbone in TransReID
+# PEFT-on-ReID: Parameter-Efficient Fine-Tuning for Person Re-Identification on Vision Transformers
 
 **Huzaifa Naseer**ᵃ, **Tameema Rehman**ᵃ, **Anas Ashfaq**ᵃ, **Farrukh Hasan Syed**ᵇ*
 
