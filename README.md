@@ -1,53 +1,90 @@
 # PEFT-on-ReID: Parameter-Efficient Fine-Tuning for Person Re-Identification on Vision Transformers
 
-Official repository for the paper: **"PEFT-on-ReID: A Systematic Comparative Study of Parameter-Efficient Fine-Tuning on Vision Transformers for Person Re-Identification"** (Naseer et al., 2025).
+Official repository for the paper: **"PEFT-on-ReID: Parameter-Efficient Fine-Tuning for Person Re-Identification on Vision Transformers"** (Naseer et al., 2025).
 
-This repository provides a unified parameter-efficient fine-tuning (PEFT) framework for Vision Transformer (ViT) backbones on TransReID, featuring **LoRA**, **SSF**, **BitFit**, **LN-Tuning**, **Bottleneck Adapters**, **Classification Control (Framing 6)**, and **MSMT17 cross-dataset validation**.
-
----
-
-## 1. Abstract & Key Contributions
-
-Vision Transformer (ViT) backbones such as TransReID achieve strong performance for person re-identification (Re-ID), but full fine-tuning is expensive in memory and compute. Parameter-efficient fine-tuning (PEFT) addresses this by freezing the backbone and learning a small set of task-specific parameters. We conduct a systematic comparison of five structurally distinct PEFT methods on TransReID:
-
-- **LoRA** — low-rank adapters on `{qkv, proj, fc1, fc2}`
-- **SSF** — per-channel scale and shift on activations
-- **Bottleneck Adapters** — parallel down-projection + GELU + up-projection bottleneck ($r=16$)
-- **BitFit & LN-Tuning** — lightweight tuning of bias terms and LayerNorm parameters
-
-### Key Findings:
-1. **Bottleneck Adapters reach near-baseline performance**: 0–11 adapters ($r=16$) achieve **85.9% mAP / 93.7% Rank-1** (within ~2 mAP of Full FT at 4.95% trainable parameters), outperforming LoRA (85.8 mAP) and SSF (79.9 mAP).
-2. **LoRA 4–11 is the optimal memory-accuracy trade-off**: Achieves **83.2% mAP / 92.8% Rank-1** at **7.84 GB VRAM** (a ~30% memory reduction).
-3. **Objective-Driven Adaptation Gap (Classification Control / Framing 6)**: Under standard Softmax Cross-Entropy classification, LoRA 0–11 ($r=8$) reaches **82.0% mAP / 92.6% Rank-1**, outperforming Full FT (**80.5% mAP / 92.1% Rank-1**) by **+1.5% mAP**, proving that the PEFT gap under Re-ID is objective-driven (triplet manifold restructuring).
+Single repository for parameter-efficient fine-tuning (PEFT) experiments on the TransReID ViT backbone, evaluating **LoRA**, **SSF**, **BitFit**, **LN-Tuning**, **Bottleneck Adapters**, **Classification Control (Framing 6)**, and **MSMT17 cross-dataset validation**.
 
 ---
 
-## 2. Experimental Results Summary (Market-1501)
+## 1. Overview
 
-### Standard Re-ID Protocol (60 Epochs, AdamW)
+Vision Transformer (ViT) backbones such as TransReID achieve strong performance for person re-identification (Re-ID), but full fine-tuning is expensive in memory and compute. Parameter-efficient fine-tuning (PEFT) addresses this by freezing the backbone and learning a small set of task-specific parameters. We conduct a systematic comparison of five structurally distinct PEFT methods on TransReID evaluated under the standard Market-1501 protocol.
 
-| Method | Block Coverage | Trainable Params (%) | Peak VRAM (GB) | mAP (%) | Rank-1 (%) | Rank-5 (%) |
-|---|---|---|---|---|---|---|
-| **Full Fine-Tuning Baseline** | 0–11 | 100.00% | 11.5 GB | **88.0%** | **94.4%** | **98.2%** |
-| **Bottleneck Adapter (r=16)** | 0–11 | 4.95% | 8.03 GB | **85.9%** 🏆 | **93.7%** 🏆 | **97.8%** |
-| **LoRA (r=8, α=16)** | 0–11 | 1.99% | 11.4 GB | **85.8%** | **93.5%** | **98.0%** |
-| **LoRA (r=32, α=64)** | 4–11 | 4.12% | 7.84 GB ⚡ | **83.2%** | **92.8%** | **97.8%** |
-| **Bottleneck Adapter (r=16)** | 4–11 | 4.24% | 5.77 GB ⚡ | **80.5%** | **90.8%** | **97.2%** |
-| **SSF (Case 2)** | 0–11 | 2.83% | 10.0 GB | **79.9%** | **91.1%** | **97.1%** |
-| **BitFit** | 0–11 | 2.89% (0.12% backbone) | 6.51 GB | **76.6%** | **89.8%** | **96.6%** |
-| **LN-Tuning** | 0–11 | 2.82% (0.04% backbone) | 6.51 GB | **65.9%** | **83.7%** | **94.8%** |
-
-### Classification Control Results (Framing 6 — Softmax Cross-Entropy)
-
-| Model | Method | Block Coverage | Trainable Params (%) | Peak VRAM | mAP (%) | Rank-1 (%) |
-|---|---|---|---|---|---|---|
-| **Full FT Baseline** | Full FT | 0–11 | 100.00% | 7.91 GB | 80.5% | 92.1% |
-| **LoRA 0–11 ($r=8, \alpha=16$)** | LoRA | 0–11 | **1.99%** | 8.14 GB | **82.0%** (+1.5%) 🏆 | **92.6%** (+0.5%) 🏆 |
-| **LoRA 4–11 ($r=32, \alpha=64$)** | LoRA | 4–11 | **4.12%** | **5.68 GB** ⚡ | **79.6%** | **90.7%** |
+### Key Contributions:
+- **Comprehensive PEFT Spectrum:** We compare weight-matrix updates (LoRA), activation-affine transformations (SSF), parallel bottleneck adapters, and lightweight parameter tuning (BitFit, LN-tuning) on a frozen ViT-Base backbone.
+- **Classification Control (Framing 6):** We evaluate PEFT methods under pure Softmax Cross-Entropy classification, demonstrating that the PEFT accuracy gap in Re-ID is objective-driven (triplet manifold restructuring) rather than a backbone capacity bottleneck.
+- **Automated Reproducibility:** Diagnostic inspectors, unit test suites, and automated benchmark runners enable full replication of all reported metrics.
 
 ---
 
-## 3. Environment & Quickstart Setup
+## 2. PEFT Paradigms & Architectures
+
+Within each adapted transformer block:
+- **LoRA:** Injects low-rank decomposition matrices $W' = W + \frac{\alpha}{r}BA$ into linear projections `{qkv, proj, fc1, fc2}`.
+- **SSF:** Applies per-channel scale and shift $y = \gamma \odot x + \beta$ post-activation after Attention, MLP, LayerNorm1, and LayerNorm2. Supports zero-FLOPs inference reparameterization.
+- **Bottleneck Adapters:** Parallel bottleneck blocks $y = x + W_{up} \text{GELU}(W_{down} x)$ wrapping target linear layers ($r=16$, zero-initialized up-projection).
+- **BitFit & LN-Tuning:** Freezes all backbone weights while training bias terms or LayerNorm parameters ($\gamma, \beta$) respectively.
+
+The backbone weights, patch embeddings, Side-Information Embeddings (SIE), and Jigsaw Patch Module (JPM) parameters remain frozen; PEFT modules and the Re-ID head remain trainable.
+
+---
+
+## 3. Configuration Space
+
+The PEFT selection is driven by `PEFT.METHOD` in the configuration files (`configs/Market/`, `configs/classification/`, `configs/MSMT17/`):
+
+| Axis | Values | Description |
+|------|--------|-------------|
+| **PEFT Method** | `lora`, `ssf`, `adapter`, `bitfit`, `lntune` | Selected via `PEFT.METHOD` |
+| **Depth Placement** | `0–11` (full), `4–11` (mid+late), `6–11` (late) | Controlled via `BLOCKS` array |
+| **LoRA Rank $r$ & Scale $\alpha$** | $r \in \{8, 16, 32\}$, $\alpha \in \{16, 32, 48, 64\}$ | Recipe favors $\alpha \approx 2r$ |
+| **Adapter Bottleneck $r$** | $r = 16$ | Parallel bottleneck dimension |
+| **SSF Optimizer Cases** | Case 1 (LoRA-matched) vs. Case 2 (SSF paper) | Controls LR and weight decay rules |
+
+---
+
+## 4. Key Results (Market-1501)
+
+### 4.1. Standard Person Re-ID Protocol
+
+All runs: single GPU, 60 epochs, AdamW optimizer, cosine learning-rate decay, seeds fixed (`1234`). Evaluated on Market-1501 under single-query protocol.
+
+| Method | Block Coverage | Trainable Params (%) | Peak VRAM (GB) | mAP (%) | Rank-1 (%) | Rank-5 (%) | Rank-10 (%) |
+|--------|:--------------:|:--------------------:|:--------------:|:-------:|:----------:|:----------:|:-----------:|
+| **Baseline (Full FT)** | 0–11 | 100.00% | 11.5 | **88.0** | **94.4** | 98.2 | 99.0 |
+| **Bottleneck Adapter (r=16)** | 0–11 | 4.95% | 8.03 | **85.9** | **93.7** | 97.8 | 98.8 |
+| LoRA (r=8, α=16) | 0–11 | 1.99% | 11.4 | 85.8 | 93.5 | 98.0 | 98.9 |
+| **LoRA (r=32, α=64)** | 4–11 | 4.12% | **7.84** | **83.2** | **92.8** | 97.8 | 98.5 |
+| Bottleneck Adapter (r=16) | 4–11 | 4.24% | 5.77 | 80.5 | 90.8 | 97.2 | 98.3 |
+| SSF (Case 2) | 0–11 | 2.83% | 10.0 | 79.9 | 91.1 | 97.1 | 98.1 |
+| BitFit | 0–11 | 2.89% | 6.51 | 76.6 | 89.8 | 96.6 | 98.0 |
+| LN-Tuning | 0–11 | 2.82% | 6.51 | 65.9 | 83.7 | 94.8 | 96.8 |
+
+### 4.2. Objective-Driven Adaptation Gap (Classification Control / Framing 6)
+
+Evaluated under Softmax Cross-Entropy loss directly on global ViT features (`NECK: 'no'`), removing pairwise metric learning losses:
+
+| Configuration | Method | Block Coverage | Trainable Params (%) | Peak VRAM (GB) | mAP (%) | Rank-1 (%) | Rank-5 (%) |
+|---------------|:------:|:--------------:|:--------------------:|:--------------:|:-------:|:----------:|:----------:|
+| Full FT Baseline | Full FT | 0–11 | 100.00% | 7.91 | 80.5 | 92.1 | 97.5 |
+| **LoRA 0–11 (r=8, α=16)** | LoRA | 0–11 | **1.99%** | 8.14 | **82.0** | **92.6** | **98.0** |
+| LoRA 4–11 (r=32, α=64) | LoRA | 4–11 | 4.12% | 5.68 | 79.6 | 90.7 | 97.0 |
+| LoRA 6–11 (r=16, α=32) | LoRA | 6–11 | 1.99% | 4.39 | 72.8 | 88.0 | 95.9 |
+| SSF 0–11 (Case 2) | SSF | 0–11 | 2.83% | 9.38 | 74.0 | 89.4 | 97.0 |
+
+### Practical Design Guidelines
+
+| Constraint | Recommended Config | Expected Outcome |
+|------------|--------------------|------------------|
+| Maximize accuracy | Full FT or 0–11 Adapter r=16 | Full FT: mAP ≈ 88%, 11.5 GB; Adapter: mAP ≈ 85.9%, 8.03 GB |
+| ~30% VRAM savings | 4–11 LoRA (r=32, α=64) | mAP ≈ 83.2%, 7.84 GB VRAM |
+| Min. trainable params | 0–11 SSF (Case 2) | mAP ≈ 79.9%, ~2.83% params |
+| Tight GPU (~7 GB) | 6–11 LoRA (r=16–32, α≈2r) | mAP ≈ 75–79%, 7–7.6 GB VRAM |
+| Tiny parameter budget | 0–11 BitFit | mAP ≈ 76.6%, ~0.12% backbone params |
+
+---
+
+## 5. Setup
 
 ### Installation
 
@@ -55,7 +92,10 @@ Vision Transformer (ViT) backbones such as TransReID achieve strong performance 
 pip install -r requirements.txt
 ```
 
+See `CUDA_SETUP_GUIDE.md` for GPU driver/PyTorch environment diagnostics.
+
 ### Dataset Preparation
+
 Place datasets under `data/`:
 ```
 data/
@@ -64,16 +104,21 @@ data/
     ├── bounding_box_test/
     └── query/
 ```
-Automated dataset downloaders are available in `datasets/`:
+
+Automated dataset scripts are provided:
 ```bash
 python datasets/download_market1501.py
 ```
 
+### Pretrained Backbone
+
+Download the ImageNet-pretrained ViT-Base checkpoint (`jx_vit_base_p16_224-80ecf9dd.pth`) and specify its path via `MODEL.PRETRAIN_PATH` in the configuration file.
+
 ---
 
-## 4. Running Experiments
+## 6. Running Experiments
 
-### A. Training Single Models
+### 6.1. Single Model Training
 
 ```bash
 # LoRA — blocks 4–11, r=32, alpha=64 (best compromise)
@@ -89,7 +134,7 @@ python train.py --config_file configs/Market/adapter_blocks_0_11_r16.yml MODEL.D
 python train.py --config_file configs/Market/baselines/vit_transreid.yml MODEL.DEVICE_ID "('0')"
 ```
 
-### B. Automated Benchmark Suite Runners
+### 6.2. Automated Suite Runners
 
 ```bash
 # Dry-run diagnostic check (CPU or GPU)
@@ -105,14 +150,14 @@ python tools/run_classification_control.py
 python tools/validate_msmt17_frontier.py
 ```
 
-### C. Testing & Evaluation
+### 6.3. Evaluation
 
 ```bash
 python test.py --config_file configs/Market/lora_blocks_4_11_r32.yml \
-  TEST.WEIGHT path/to/checkpoint.pth MODEL.DEVICE_ID "('0')"
+    MODEL.DEVICE_ID "('0')" TEST.WEIGHT path/to/checkpoint.pth
 ```
 
-### D. Unit Tests
+### 6.4. Unit Testing
 
 ```bash
 python -m pytest tests/
@@ -120,16 +165,29 @@ python -m pytest tests/
 
 ---
 
-## 5. Documentation & Detailed Manuscripts
+## 7. Config Reference
 
-- [research.md](research.md): Full academic manuscript detailing Methodology, Experiments, Configuration Maps, and Limitations.
-- [results.md](results.md): Complete reviewer replication logs, hyperparameter matrices, and VRAM benchmarks.
-- [docs/PEFT_IMPLEMENTATION.md](docs/PEFT_IMPLEMENTATION.md): Deep-dive into model injection architecture.
-- [docs/VAST_AI.md](docs/VAST_AI.md): Setup guide for cloud GPU training (vast.ai).
+```yaml
+PEFT:
+  METHOD: "lora" # "none" | "lora" | "ssf" | "bitfit" | "lntune" | "adapter"
+
+  LORA:
+    R: 32
+    ALPHA: 64
+    DROPOUT: 0.05
+    TARGETS: ["qkv", "proj", "fc1", "fc2"]
+    BLOCKS: [4, 5, 6, 7, 8, 9, 10, 11]
+
+  ADAPTER:
+    R: 16
+    DROPOUT: 0.05
+    TARGETS: ["qkv", "proj", "fc1", "fc2"]
+    BLOCKS: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+```
 
 ---
 
-## 6. Citation
+## 8. Citation
 
 If you use this repository or code, please cite our study and the original TransReID:
 
@@ -151,6 +209,6 @@ If you use this repository or code, please cite our study and the original Trans
 
 ---
 
-## 7. Acknowledgements
+## 9. Acknowledgements
 
 Built on top of [TransReID](https://github.com/damo-cv/TransReID). LoRA formulation follows Hu et al. (ICLR 2022), SSF follows Lian et al. (NeurIPS 2022), BitFit follows Zaken et al. (ACL 2022).
