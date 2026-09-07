@@ -1,8 +1,15 @@
+![Python >=3.8](https://img.shields.io/badge/Python->=3.8-yellow.svg)
+![PyTorch >=1.6](https://img.shields.io/badge/PyTorch->=1.6-blue.svg)
+![PEFT](https://img.shields.io/badge/PEFT-LoRA%20%7C%20SSF%20%7C%20Adapter-green.svg)
+![Task](https://img.shields.io/badge/Task-Person%20Re--ID-orange.svg)
+
 # PEFT-on-ReID: Parameter-Efficient Fine-Tuning for Person Re-Identification on Vision Transformers
 
-Official repository for the paper: **"PEFT-on-ReID: Parameter-Efficient Fine-Tuning for Person Re-Identification on Vision Transformers"** (Naseer et al., 2025).
+This repository is a research fork of the official [**TransReID**](https://github.com/damo-cv/TransReID) codebase, extended with multiple parameter-efficient fine-tuning (PEFT) methods for the ViT-Base backbone.
 
-Single repository for parameter-efficient fine-tuning (PEFT) experiments on the TransReID ViT backbone, combining **LoRA**, **SSF**, **BitFit**, **LN-Tuning**, **Bottleneck Adapters**, **Classification Control (Framing 6)**, and **MSMT17 cross-dataset validation**.
+> **PEFT-on-ReID: Parameter-Efficient Fine-Tuning for Person Re-Identification on Vision Transformers**
+> Huzaifa Naseer, Tameema Rehman, Anas Ashfaq, Farrukh Hasan Syed
+> *Department of Computer Science, FAST-NUCES, Karachi, Pakistan*
 
 ---
 

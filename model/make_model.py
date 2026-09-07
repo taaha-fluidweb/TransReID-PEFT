@@ -30,8 +30,10 @@ from .backbones.vit_pytorch import (
 def shuffle_unit(features, shift, group, begin=1):
     batchsize = features.size(0)
     dim = features.size(-1)
+    # Shift Operation
     feature_random = torch.cat([features[:, begin - 1 + shift:], features[:, begin:begin - 1 + shift]], dim=1)
     x = feature_random
+    # Patch Shuffle Operation
     try:
         x = x.view(batchsize, group, -1, dim)
     except Exception:
@@ -138,6 +140,12 @@ class Backbone(nn.Module):
             self.state_dict()[i].copy_(param_dict[i])
         print('Loading pretrained model from {}'.format(trained_path))
 
+    def load_param_finetune(self, model_path):
+        param_dict = torch.load(model_path)
+        for i in param_dict:
+            self.state_dict()[i].copy_(param_dict[i])
+        print('Loading pretrained model for finetuning from {}'.format(model_path))
+
 
 class build_transformer(nn.Module):
     def __init__(self, num_classes, camera_num, view_num, cfg, factory):
@@ -214,6 +222,12 @@ class build_transformer(nn.Module):
 
     def load_param(self, trained_path):
         _load_checkpoint_state(self, trained_path)
+
+    def load_param_finetune(self, model_path):
+        param_dict = torch.load(model_path)
+        for i in param_dict:
+            self.state_dict()[i].copy_(param_dict[i])
+        print('Loading pretrained model for finetuning from {}'.format(model_path))
 
 
 class build_transformer_local(nn.Module):
@@ -308,9 +322,11 @@ class build_transformer_local(nn.Module):
 
     def forward(self, x, label=None, cam_label=None, view_label=None):
         features = self.base(x, cam_label=cam_label, view_label=view_label)
+        # global branch
         b1_feat = self.b1(features)
         global_feat = b1_feat[:, 0]
 
+        # JPM branch
         feature_length = features.size(1) - 1
         patch_length = feature_length // self.divide_length
         token = features[:, 0:1]
@@ -320,12 +336,16 @@ class build_transformer_local(nn.Module):
         else:
             x = features[:, 1:]
 
+        # lf_1
         b1_local_feat = self.b2(torch.cat((token, x[:, :patch_length]), dim=1))
         local_feat_1 = b1_local_feat[:, 0]
+        # lf_2
         b2_local_feat = self.b2(torch.cat((token, x[:, patch_length:patch_length * 2]), dim=1))
         local_feat_2 = b2_local_feat[:, 0]
+        # lf_3
         b3_local_feat = self.b2(torch.cat((token, x[:, patch_length * 2:patch_length * 3]), dim=1))
         local_feat_3 = b3_local_feat[:, 0]
+        # lf_4
         b4_local_feat = self.b2(torch.cat((token, x[:, patch_length * 3:patch_length * 4]), dim=1))
         local_feat_4 = b4_local_feat[:, 0]
 
@@ -357,6 +377,12 @@ class build_transformer_local(nn.Module):
 
     def load_param(self, trained_path):
         _load_checkpoint_state(self, trained_path)
+
+    def load_param_finetune(self, model_path):
+        param_dict = torch.load(model_path)
+        for i in param_dict:
+            self.state_dict()[i].copy_(param_dict[i])
+        print('Loading pretrained model for finetuning from {}'.format(model_path))
 
 
 __factory_T_type = {

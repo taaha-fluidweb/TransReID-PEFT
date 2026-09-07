@@ -77,14 +77,23 @@ _C.PEFT = CN()
 _C.PEFT.METHOD = 'none'  # 'none' | 'lora' | 'ssf' | 'lntune' | 'bitfit' | 'adapter'
 
 _C.PEFT.LORA = CN()
+# Rank of the low-rank decomposition
 _C.PEFT.LORA.R = 8
+# Alpha parameter for LoRA scaling
 _C.PEFT.LORA.ALPHA = 16
+# Dropout probability for LoRA layers
 _C.PEFT.LORA.DROPOUT = 0.0
+# Target modules to apply LoRA (list of strings)
 _C.PEFT.LORA.TARGETS = ["qkv", "proj", "fc1", "fc2"]
+# Whether to train the classification head when using LoRA
 _C.PEFT.LORA.TRAIN_HEAD = True
+# Whether to merge LoRA weights into base model during evaluation
 _C.PEFT.LORA.MERGE_AT_EVAL = False
+# Bias handling: "none", "all", or "lora"
 _C.PEFT.LORA.BIAS = "none"
+# Save only LoRA adapter weights (not full model)
 _C.PEFT.LORA.SAVE_ADAPTER_ONLY = True
+# List of transformer blocks to apply LoRA to (e.g., [6, 7, 8, 9, 10, 11]). If empty, apply to all blocks.
 _C.PEFT.LORA.BLOCKS = []
 
 _C.PEFT.SSF = CN()

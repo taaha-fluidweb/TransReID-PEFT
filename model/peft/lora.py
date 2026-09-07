@@ -1,3 +1,4 @@
+# model/peft/lora.py
 import math
 from typing import Iterable, List, Optional, Tuple
 
@@ -11,7 +12,12 @@ def _identity_or_dropout(p: float):
 
 
 class LoRALinear(nn.Module):
-    """Wrap an existing nn.Linear with a low-rank adapter update."""
+    """
+    Wrap an existing nn.Linear as:
+      y = base(x) + scaling * (B(A(dropout(x)))) + optional lora_bias
+    - base params are frozen
+    - only A, B (and optional lora_bias) are trainable
+    """
 
     def __init__(
         self,
@@ -19,7 +25,7 @@ class LoRALinear(nn.Module):
         r: int = 8,
         alpha: float = 16.0,
         dropout: float = 0.0,
-        bias_mode: str = "none",
+        bias_mode: str = "none",  # "none" | "lora" | "all" (keep "none" by default)
     ):
         super().__init__()
         assert isinstance(base, nn.Linear)
@@ -36,6 +42,7 @@ class LoRALinear(nn.Module):
         self.bias_mode = bias_mode
 
         if self.r > 0:
+            # A: (r, in), B: (out, r)
             self.lora_A = nn.Parameter(torch.empty(self.r, self.in_features))
             self.lora_B = nn.Parameter(torch.empty(self.out_features, self.r))
             nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
@@ -53,21 +60,38 @@ class LoRALinear(nn.Module):
         y = self.base(x)
         if self.r > 0:
             x_d = self.drop(x)
-            update = F.linear(x_d, self.lora_A)
-            update = F.linear(update, self.lora_B)
+            # (B, in) -> (B, r) via A^T; then (B, out) via B
+            update = F.linear(x_d, self.lora_A)          # (B, r)
+            update = F.linear(update, self.lora_B)       # (B, out)
             y = y + self.scaling * update
         if self.lora_bias is not None:
             y = y + self.lora_bias
         return y
 
+    @property
+    def adapter_state(self):
+        s = {}
+        if self.lora_A is not None:
+            s["lora_A"] = self.lora_A
+        if self.lora_B is not None:
+            s["lora_B"] = self.lora_B
+        if self.lora_bias is not None:
+            s["lora_bias"] = self.lora_bias
+        return s
+
     def merge_into_base_(self):
+        """
+        One-way merge: bake LoRA weights into base.weight (and bias if present),
+        then zero adapters to avoid double counting.
+        """
         if self.r == 0:
             return
         with torch.no_grad():
-            delta = self.scaling * (self.lora_B @ self.lora_A)
+            delta = self.scaling * (self.lora_B @ self.lora_A)  # (out, in)
             self.base.weight += delta
             if self.lora_bias is not None and self.base.bias is not None:
                 self.base.bias += self.lora_bias
+            # zero adapters after merge
             nn.init.zeros_(self.lora_B)
             nn.init.zeros_(self.lora_A)
             if self.lora_bias is not None:
@@ -75,6 +99,7 @@ class LoRALinear(nn.Module):
 
 
 def set_module_by_name(model: nn.Module, name: str, new_module: nn.Module):
+    """Replace a nested submodule given its dotted path name."""
     parts = name.split(".")
     parent = model
     for p in parts[:-1]:
@@ -91,6 +116,14 @@ def get_module_by_name(model: nn.Module, name: str) -> nn.Module:
 
 
 def iter_linear_targets(model: nn.Module, targets: List[str]) -> Iterable[Tuple[str, nn.Linear]]:
+    """
+    Yield (qualified_name, linear_module) for layers whose qualified name contains
+    any of the target keys. Typical ViT/timm names include:
+      - attention.qkv (Linear)
+      - attention.proj (Linear)
+      - mlp.fc1, mlp.fc2 (Linear)
+    Adjust `targets` if your repo uses different names.
+    """
     for name, module in model.named_modules():
         if isinstance(module, nn.Linear):
             if any(t in name for t in targets):
@@ -106,15 +139,32 @@ def inject_lora_into_vit(
     bias_mode: str = "none",
     include_blocks: Optional[List[int]] = None,
 ):
+    """
+    Wrap matching nn.Linear modules with LoRALinear and return list of replaced names.
+
+    Args:
+        model: The model to inject LoRA into
+        r: LoRA rank
+        alpha: LoRA alpha scaling
+        dropout: Dropout rate for LoRA
+        targets: List of target module names (e.g., ["qkv", "proj", "fc1", "fc2"])
+        bias_mode: Bias handling mode
+        include_blocks: Optional list of block indices to apply LoRA to (e.g., [6, 7, 8, 9, 10, 11]).
+                       If None, applies to all blocks.
+    """
     replaced = []
     for name, lin in list(iter_linear_targets(model, targets)):
+        # Check if this layer is in a specified block (if include_blocks is provided)
         if include_blocks is not None and len(include_blocks) > 0:
+            # Extract block number from the module name (e.g., "blocks.6.attn.qkv" -> 6)
             if "blocks." in name:
                 try:
                     block_idx = int(name.split("blocks.")[1].split(".")[0])
                     if block_idx not in include_blocks:
+                        # Skip this layer as it's not in the specified blocks
                         continue
                 except (IndexError, ValueError):
+                    # If we can't parse the block index, apply LoRA anyway
                     pass
 
         wrapped = LoRALinear(lin, r=r, alpha=alpha, dropout=dropout, bias_mode=bias_mode)
@@ -124,11 +174,17 @@ def inject_lora_into_vit(
 
 
 def mark_trainable_lora_and_head(model: nn.Module, train_head: bool = True):
+    """
+    Freeze everything, then unfreeze:
+      - LoRA adapter params (A/B/bias),
+      - classifier/BNNeck/ID head params if train_head=True.
+    """
     for p in model.parameters():
         p.requires_grad = False
 
     for _, m in model.named_modules():
         if isinstance(m, LoRALinear):
+            # Only unfreeze LoRA adapter parameters, not base parameters
             if m.lora_A is not None:
                 m.lora_A.requires_grad = True
             if m.lora_B is not None:
@@ -145,6 +201,11 @@ def mark_trainable_lora_and_head(model: nn.Module, train_head: bool = True):
 
 
 def lora_state_dict(model: nn.Module) -> dict:
+    """
+    Return only LoRA adapter tensors in a flat dict keyed by qualified module name.
+    Example keys:
+      "...attn.qkv.lora_A", "...attn.qkv.lora_B", "...attn.qkv.lora_bias"
+    """
     sd = {}
     for name, module in model.named_modules():
         if isinstance(module, LoRALinear):
@@ -157,8 +218,12 @@ def lora_state_dict(model: nn.Module) -> dict:
 
 
 def load_lora_state_dict(model: nn.Module, adapter_sd: dict, strict: bool = False):
+    """
+    Load LoRA adapter tensors back into matching modules. Missing keys are ignored unless strict=True.
+    """
     missing = []
     for k, v in adapter_sd.items():
+        # split "...module_path.param_name"
         try:
             mod_name, tensor_name = k.rsplit(".", 1)
             mod = get_module_by_name(model, mod_name)
@@ -172,6 +237,10 @@ def load_lora_state_dict(model: nn.Module, adapter_sd: dict, strict: bool = Fals
 
 
 def maybe_merge_lora(model: nn.Module, enabled: bool, merge_at_eval: bool):
+    """
+    If enabled and merge_at_eval=True, register a forward-pre hook that merges adapters
+    into base weights once the model is put into eval mode (idempotent for a session).
+    """
     if not enabled or not merge_at_eval:
         return
 
@@ -185,4 +254,5 @@ def maybe_merge_lora(model: nn.Module, enabled: bool, merge_at_eval: bool):
                 module.merge_into_base_()
         merged_once["done"] = True
 
+    # Merge when the first forward happens after .eval() is set.
     model.register_forward_pre_hook(merge_hook, with_kwargs=False)
